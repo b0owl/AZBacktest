@@ -1,0 +1,19 @@
+{
+  "name": "AZBacktestGUI",
+  "version": "1.0.0",
+  "main": "out/main/main.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.0",
+    "plotly.js-dist-min": "^3.6.0"
+  },
+  "devDependencies": {
+    "electron": "^42.4.0",
+    "electron-vite": "^2.3.0",
+    "vite": "^5.0.0"
+  }
+}

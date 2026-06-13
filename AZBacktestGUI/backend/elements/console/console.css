@@ -1,0 +1,40 @@
+#console {
+    white-space: pre;
+    font-family: 'Courier New', monospace;
+
+    position: fixed;
+    top: 1%;
+    left: 50%;
+    transform: translateX(-50%);
+
+    width: 520px;
+    height: 52px;
+
+    background: #161b27;
+    display: none;
+
+    border: 1.5px solid #3b82f6;
+    border-radius: 8px;
+    overflow: hidden;
+
+    box-shadow: 0 0 24px rgba(59, 130, 246, 0.18), 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+#console-content {
+    position: absolute;
+    color: #e2e8f0;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+}
+
+#console-cursor {
+    position: absolute;
+    background-color: #3b82f6;
+    width: 7px;
+    height: 16px;
+    display: none;
+    border-radius: 1px;
+}
