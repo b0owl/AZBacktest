@@ -1,9 +1,8 @@
-const _DEFAULT_CSV = 'C:/Users/b0owl/Projects/Backtests/CVD/results/trades.csv'
-export const TRADES_CSV = localStorage.getItem('tradesCsvPath') || _DEFAULT_CSV
+export const TRADES_CSV = localStorage.getItem('tradesCsvPath') || ''
 export const fsUrl = path => '/@fs/' + path
 
 import { keyboardEvents } from './keyboardEvents/keyboardEvents.js'
-import { openConsole, closeConsole, consoleAppend, consoleDelete, consoleDeleteBlock, consoleSubmit } from './elements/console/console.js'
+import { openConsole, closeConsole, consoleAppend, consoleDelete, consoleDeleteBlock, consoleSubmit, consoleGetText } from './elements/console/console.js'
 import './elements/console/console.css'
 import './elements/charts/charts.css'
 import '../rendering/stylesheet.css'
@@ -28,6 +27,16 @@ keyboardEvents(
             consoleOpen = false
             closeConsole()
         }
+        else if (key === 'KeyV' && ctrl && consoleOpen) {
+            allowAsChar = false
+            navigator.clipboard.readText().then(text => {
+                for (const char of text) consoleAppend(char)
+            })
+        }
+        else if (key === 'KeyC' && ctrl && consoleOpen) {
+            allowAsChar = false
+            navigator.clipboard.writeText(consoleGetText())
+        }
         else if (key === 'Backspace' && consoleOpen) {
             if (ctrl)
                 consoleDeleteBlock()
@@ -38,22 +47,24 @@ keyboardEvents(
             allowAsChar = false
             const words = consoleSubmit()
             if (words.length > 0) {
-                if (words[0] === 'GO' && words[1] === 'STATPAGE') {
+                const cmd = words[0].toUpperCase()
+                const sub = (words[1] || '').toUpperCase()
+                if (cmd === 'GO' && sub === 'STATPAGE') {
                     document.querySelector('.equityCurve').style.display = 'none'
                     document.querySelector('.wrOverTime').style.display = 'flex'
-                } else if (words[0] === 'GO' && words[1] === 'EQUITY') {
+                } else if (cmd === 'GO' && sub === 'EQUITY') {
                     document.querySelector('.equityCurve').style.display = 'block'
                     document.querySelector('.wrOverTime').style.display = 'none'
-                } else if (words[0] === 'SET' && words[1] === 'RESULTS') {
-                    localStorage.setItem('tradesCsvPath', words[2])
+                } else if (cmd === 'SET' && sub === 'RESULTS') {
+                    localStorage.setItem('tradesCsvPath', words.slice(2).join(' '))
                     location.reload()
                 }
             }
             consoleOpen = false
             closeConsole()
-        } else if (key === 'Shift') {
-            allowAsChar = false 
-        } else {
+        } else if (key === 'Shift' || key === 'ControlLeft' || key === 'ControlRight') {
+            allowAsChar = false
+        } else if (!ctrl) {
             allowAsChar = true
         }
     },
@@ -61,8 +72,8 @@ keyboardEvents(
 )
 
 keyboardEvents(
-    (key) => {
-        if (consoleOpen && allowAsChar && key !== 'Control' && key !== 'Shift') consoleAppend(key)
+    (key, ctrl) => {
+        if (consoleOpen && allowAsChar && !ctrl && key !== 'Control' && key !== 'Shift') consoleAppend(key)
     },
     false
 )

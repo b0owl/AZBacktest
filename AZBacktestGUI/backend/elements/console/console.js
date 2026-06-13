@@ -52,10 +52,15 @@ export function consoleDelete() {
 export function consoleSubmit() {
     const el   = document.getElementById('console-content')
     const text = Array.from(el.querySelectorAll('span')).map(s => s.textContent).join('').trim()
-    const words = text.toUpperCase().split(/\s+/).filter(w => w.length > 0)
+    const words = text.split(/\s+/).filter(w => w.length > 0)
     Array.from(el.querySelectorAll('span')).forEach(s => s.remove())
     updateCursor()
     return words
+}
+
+export function consoleGetText() {
+    const el = document.getElementById('console-content')
+    return Array.from(el.querySelectorAll('span')).map(s => s.textContent).join('')
 }
 
 export function consoleDeleteBlock() {
