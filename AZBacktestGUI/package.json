@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "out/main/main.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "SET ELECTRON_RUN_AS_NODE=1& electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview"
   },
