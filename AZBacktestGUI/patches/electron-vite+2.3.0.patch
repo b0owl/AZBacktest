@@ -1,0 +1,30 @@
+diff --git a/node_modules/electron-vite/dist/chunks/lib-BmEkZIgk.mjs b/node_modules/electron-vite/dist/chunks/lib-BmEkZIgk.mjs
+index 0cf4983..94ca7b7 100644
+--- a/node_modules/electron-vite/dist/chunks/lib-BmEkZIgk.mjs
++++ b/node_modules/electron-vite/dist/chunks/lib-BmEkZIgk.mjs
+@@ -211,7 +211,9 @@ function startElectron(root) {
+         args.push('--no-sandbox');
+     }
+     const entry = process.env.ELECTRON_ENTRY || '.';
+-    const ps = spawn(electronPath, [entry].concat(args), { stdio: 'inherit' });
++    const electronEnv = { ...process.env };
++    delete electronEnv.ELECTRON_RUN_AS_NODE;
++    const ps = spawn(electronPath, [entry].concat(args), { stdio: 'inherit', env: electronEnv });
+     ps.on('close', process.exit);
+     return ps;
+ }
+diff --git a/node_modules/electron-vite/dist/chunks/lib-CMs-qhOt.cjs b/node_modules/electron-vite/dist/chunks/lib-CMs-qhOt.cjs
+index c203707..f813728 100644
+--- a/node_modules/electron-vite/dist/chunks/lib-CMs-qhOt.cjs
++++ b/node_modules/electron-vite/dist/chunks/lib-CMs-qhOt.cjs
+@@ -214,7 +214,9 @@ function startElectron(root) {
+         args.push('--no-sandbox');
+     }
+     const entry = process.env.ELECTRON_ENTRY || '.';
+-    const ps = node_child_process.spawn(electronPath, [entry].concat(args), { stdio: 'inherit' });
++    const electronEnv = { ...process.env };
++    delete electronEnv.ELECTRON_RUN_AS_NODE;
++    const ps = node_child_process.spawn(electronPath, [entry].concat(args), { stdio: 'inherit', env: electronEnv });
+     ps.on('close', process.exit);
+     return ps;
+ }
