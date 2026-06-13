@@ -20,6 +20,46 @@
     box-shadow: 0 0 24px rgba(59, 130, 246, 0.18), 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
+#console-printout {
+    position: absolute;
+    top: 52px;
+    left: 0;
+    right: 0;
+    padding: 10px 14px;
+    display: none;
+    overflow: hidden;
+}
+
+.console-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.console-pane-row {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    align-items: center;
+    padding: 5px 10px;
+    background: #0d1117;
+    border: 1px solid #21262d;
+    border-radius: 4px;
+}
+
+.console-pane-label {
+    color: #58a6ff;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    font-family: 'Courier New', monospace;
+}
+
+.console-pane-value {
+    color: #8b949e;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    font-family: 'Courier New', monospace;
+}
+
 #console-content {
     position: absolute;
     color: #e2e8f0;

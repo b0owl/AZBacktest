@@ -3,8 +3,7 @@ function updateCursor() {
     const cursor  = document.getElementById('console-cursor')
     const box     = document.getElementById('console').getBoundingClientRect()
 
-    const consoleEl = document.getElementById('console')
-    const cursorY = Math.round((consoleEl.offsetHeight - 20) / 2)
+    const cursorY = Math.round((52 - 20) / 2)
 
     if (content.lastChild) {
         const spanRect = content.lastChild.getBoundingClientRect()
@@ -24,10 +23,14 @@ export function openConsole() {
 }
 
 export function closeConsole() {
-    const el    = document.getElementById('console-content')
-    const spans = Array.from(el.querySelectorAll('span'))
+    const el      = document.getElementById('console-content')
+    const printout = document.getElementById('console-printout')
+    const spans   = Array.from(el.querySelectorAll('span'))
     document.getElementById('console').style.display = 'none'
+    document.getElementById('console').style.height = ''
     document.getElementById('tint').style.display = 'none'
+    printout.style.display = 'none'
+    printout.innerHTML = ''
     while (spans.length > 0) {
         spans.pop().remove()
     }
@@ -35,6 +38,12 @@ export function closeConsole() {
 }
 
 export function consoleAppend(keypress) {
+    const printout = document.getElementById('console-printout')
+    if (printout.style.display !== 'none') {
+        printout.style.display = 'none'
+        printout.innerHTML = ''
+        document.getElementById('console').style.height = ''
+    }
     const el   = document.getElementById('console-content')
     const span = document.createElement('span')
     span.style.textTransform = 'uppercase'
@@ -74,5 +83,39 @@ export function consoleDeleteBlock() {
             spans.pop().remove()
         }
     }
+    updateCursor()
+}
+
+export function addConsolePane(rows) {
+    const consoleEl = document.getElementById('console')
+    const printout  = document.getElementById('console-printout')
+
+    printout.innerHTML = ''
+
+    const pane = document.createElement('div')
+    pane.className = 'console-pane'
+
+    for (const { label, value } of rows) {
+        const row = document.createElement('div')
+        row.className = 'console-pane-row'
+
+        const lEl = document.createElement('span')
+        lEl.className = 'console-pane-label'
+        lEl.textContent = label
+
+        const vEl = document.createElement('span')
+        vEl.className = 'console-pane-value'
+        vEl.textContent = value
+
+        row.appendChild(lEl)
+        row.appendChild(vEl)
+        pane.appendChild(row)
+    }
+
+    printout.appendChild(pane)
+    printout.style.display = 'block'
+
+    // 52px = input bar, 20px = printout padding, 34px = row height + gap per row
+    consoleEl.style.height = (52 + 20 + rows.length * 34) + 'px'
     updateCursor()
 }

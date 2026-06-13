@@ -2,7 +2,7 @@ export const TRADES_CSV = localStorage.getItem('tradesCsvPath') || ''
 export const fsUrl = path => '/@fs/' + path
 
 import { keyboardEvents } from './keyboardEvents/keyboardEvents.js'
-import { openConsole, closeConsole, consoleAppend, consoleDelete, consoleDeleteBlock, consoleSubmit, consoleGetText } from './elements/console/console.js'
+import { openConsole, closeConsole, consoleAppend, consoleDelete, consoleDeleteBlock, consoleSubmit, consoleGetText, addConsolePane } from './elements/console/console.js'
 import './elements/console/console.css'
 import './elements/charts/charts.css'
 import '../rendering/stylesheet.css'
@@ -52,16 +52,28 @@ keyboardEvents(
                 if (cmd === 'GO' && sub === 'STATPAGE') {
                     document.querySelector('.equityCurve').style.display = 'none'
                     document.querySelector('.wrOverTime').style.display = 'flex'
+                    consoleOpen = false
+                    closeConsole()
                 } else if (cmd === 'GO' && sub === 'EQUITY') {
                     document.querySelector('.equityCurve').style.display = 'block'
                     document.querySelector('.wrOverTime').style.display = 'none'
+                    consoleOpen = false
+                    closeConsole()
                 } else if (cmd === 'SET' && sub === 'RESULTS') {
                     localStorage.setItem('tradesCsvPath', words.slice(2).join(' '))
                     location.reload()
+                    consoleOpen = false
+                    closeConsole()
+                } else if (cmd === 'HELP') {
+                    addConsolePane([
+                        { label: 'GO EQUITY',     value: 'Equity curve view' },
+                        { label: 'GO STATPAGE',   value: 'Win rate + trade log' },
+                        { label: 'SET RESULTS',   value: 'Set path to trades.csv' },
+                        { label: 'HELP',          value: 'Show this menu' },
+                    ])
                 }
             }
-            consoleOpen = false
-            closeConsole()
+
         } else if (key === 'Shift' || key === 'ControlLeft' || key === 'ControlRight') {
             allowAsChar = false
         } else if (!ctrl) {
@@ -73,7 +85,7 @@ keyboardEvents(
 
 keyboardEvents(
     (key, ctrl) => {
-        if (consoleOpen && allowAsChar && !ctrl && key !== 'Control' && key !== 'Shift') consoleAppend(key)
+        if (consoleOpen && allowAsChar && !ctrl && key.length === 1) consoleAppend(key)
     },
     false
 )
