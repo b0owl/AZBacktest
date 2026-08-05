@@ -155,7 +155,7 @@ int main() {
     mainPaths.push_back(profit);
     for (auto& p : pctPaths) mainPaths.push_back(std::move(p));
 
-    addSeries("mc cloud", mcPaths, {}, 0, RGBA{0.4f, 0.4f, 0.4f, 0.08f});
+    addSeries("mc cloud", mcPaths, {}, 0, RGBA{0.4f, 0.4f, 0.4f, 0.3f});
     addSeries("equity + percentiles", mainPaths,
         {"actual", "p5", "p50", "p95"}, 0, RGBA{0.5f, 0.8f, 0.5f, 1.0f});
 
