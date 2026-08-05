@@ -116,7 +116,7 @@ for f in "${SCANNED[@]}"; do
     fi
 done
 if [[ $uses_imgui -eq 1 ]]; then
-    EXTRA_INCLUDES+=(-I"$PROJECT_ROOT/vendor/imgui" -I"$PROJECT_ROOT/vendor/imgui/backends" -I"$PROJECT_ROOT/vendor/glfw/include")
+    EXTRA_INCLUDES+=(-I"$PROJECT_ROOT/vendor/imgui" -I"$PROJECT_ROOT/vendor/imgui/backends")
     EXTRA_SOURCES+=(
         "$PROJECT_ROOT/vendor/imgui/imgui.cpp"
         "$PROJECT_ROOT/vendor/imgui/imgui_draw.cpp"
@@ -125,7 +125,24 @@ if [[ $uses_imgui -eq 1 ]]; then
         "$PROJECT_ROOT/vendor/imgui/backends/imgui_impl_glfw.cpp"
         "$PROJECT_ROOT/vendor/imgui/backends/imgui_impl_opengl3.cpp"
     )
-    EXTRA_LIBS+=(-L"$PROJECT_ROOT/vendor/glfw/lib" -lglfw3 -lopengl32 -lgdi32 -lshell32 -lwinmm)
+    # Platform-specific libraries and includes
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS - use Homebrew GLFW (detect correct prefix, with fallback)
+        if [[ -f "/opt/homebrew/lib/libglfw.dylib" ]] || [[ -f "/opt/homebrew/lib/libglfw3.a" ]]; then
+            BREW_PREFIX="/opt/homebrew"
+        elif [[ -f "/usr/local/lib/libglfw.dylib" ]] || [[ -f "/usr/local/lib/libglfw3.a" ]]; then
+            BREW_PREFIX="/usr/local"
+        else
+            echo "Error: GLFW not found. Install with: brew install glfw" >&2
+            exit 1
+        fi
+        EXTRA_INCLUDES+=(-I"$BREW_PREFIX/include")
+        EXTRA_LIBS+=(-L"$BREW_PREFIX/lib" -lglfw -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo)
+    else
+        # Windows (assumes MinGW/MSYS) - use vendored GLFW
+        EXTRA_INCLUDES+=(-I"$PROJECT_ROOT/vendor/glfw/include")
+        EXTRA_LIBS+=(-L"$PROJECT_ROOT/vendor/glfw/lib" -lglfw3 -lopengl32 -lgdi32 -lshell32 -lwinmm)
+    fi
 fi
 
 uses_implot=0
