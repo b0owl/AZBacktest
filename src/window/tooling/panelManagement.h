@@ -29,6 +29,7 @@ struct Series {
 struct Panel {
     std::string id;                  ///< unique id; also drives the ImGui window title
     std::vector<Series> children;    ///< series currently attached to this panel
+    bool axesLocked = true;          ///< true = x/y axes can't be panned or zoomed
 };
 
 /// @brief all active panels, rendered each frame by renderPanels()
@@ -84,13 +85,17 @@ inline void renderPanels() {
                             // for large multi-column series (clouds), hide individual legend entries
                             bool hide = s.cols() > 10 && col > 0;
                             if (hide) label = "##" + s.name + "_" + std::to_string(col);
-                            p.children.push_back({s.type == 1 ? Bar : Line, label, s.data[col], false, s.color, hide});
+                            p.children.push_back({s.type == 1 ? Bar : Line, label, s.data[col], false, s.color, hide, s.onY2});
                         }
                     }
                 }
             }
             ImGui::EndPopup();
         }
+
+        ImGui::SameLine();
+        std::string lockId = "Lock axes##lock_" + p.id;
+        ImGui::Checkbox(lockId.c_str(), &p.axesLocked);
 
         // Per-series toggle for which y-axis (left/Y1 vs right/Y2) each
         // series plots against, only shown once there's more than one
@@ -108,11 +113,18 @@ inline void renderPanels() {
         }
 
         if (ImPlot::BeginPlot(p.id.c_str(), ImVec2(-1, -1))) {
+            // panning/zooming disabled on both axes by default; "Lock axes"
+            // above toggles it per-panel
+            ImPlotAxisFlags lockFlags = p.axesLocked ? ImPlotAxisFlags_Lock : ImPlotAxisFlags_None;
+
             // Y2 stays hidden/auto-fit unless a series actually opts into it
-            ImPlotAxisFlags y2Flags = ImPlotAxisFlags_AuxDefault;
+            ImPlotAxisFlags y2Flags = ImPlotAxisFlags_AuxDefault | lockFlags;
             bool anyOnY2 = false;
             for (auto& c : p.children) if (c.onY2) { anyOnY2 = true; break; }
             if (!anyOnY2) y2Flags |= ImPlotAxisFlags_NoDecorations;
+
+            ImPlot::SetupAxis(ImAxis_X1, nullptr, lockFlags);
+            ImPlot::SetupAxis(ImAxis_Y1, nullptr, lockFlags);
             ImPlot::SetupAxis(ImAxis_Y2, nullptr, y2Flags);
 
             for (auto& c : p.children) {
