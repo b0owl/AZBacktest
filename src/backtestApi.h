@@ -199,8 +199,8 @@ public:
     /// @param md       the MarketData source to read from
     /// @param period   how many rows/bars to load
     /// @param timeframe 0 = tick-by-tick, >0 = close every N seconds
-    /// @param tickRes  timeframe>0 only: 1 = full resolution, how many bars the
-    /// program is allowed to skip to match with the timeframe
+    /// @param tickRes  timeframe==0 only: 1 = full resolution, how many raw ticks
+    /// get read (and discarded) between each kept tick, to downsample tick-by-tick data
     DataWindow requestDataWindow(MarketData& md, int period, int timeframe=0, int tickRes=1) {
         DataWindow out;
         out.prices.reserve(period);
@@ -209,7 +209,11 @@ public:
         windowTimestamps.reserve(period);
         if (timeframe==0) {
             for (int i=0; i<period; i++) {
-                auto tick = md.nextTick();
+                std::optional<Tick> tick;
+                for (int j=0; j<tickRes; j++) {
+                    tick = md.nextTick();
+                    if (!tick) break;
+                }
                 if (!tick) break;
                 float px = 0.f;
                 std::from_chars(tick->price.data(), tick->price.data() + tick->price.size(), px);
