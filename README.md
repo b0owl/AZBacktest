@@ -86,12 +86,12 @@ Advances the open trade's P&L to current price and records an equity curve sampl
 
 - `timestamp` — if non-empty, gets parsed for equity curve timestamps
 
-#### `std::vector<float> Handling::requestDataWindow(MarketData& md, int period, int timeframe = 0)`
-Pulls `period` prices from the market data source.
+#### `DataWindow Handling::requestDataWindow(MarketData& md, int period, int timeframe = 0)`
+Pulls `period` bars from the market data source. Returns a `DataWindow` with parallel `prices` and `volumes` vectors; typical usage is `prices = std::move(window.prices)` (to update the vector bound to `Handling`) and feed `window.volumes` into `returnVolumeProfile`.
 
 - `md` — MarketData source
 - `period` — how many rows/bars to load
-- `timeframe` — 0 = tick-by-tick, >0 = close every N seconds
+- `timeframe` — 0 = tick-by-tick, >0 = close every N seconds. For tick mode `volumes[i]` is that tick's traded size; for bar mode it's the summed volume across all ticks in the bar.
 
 ---
 
