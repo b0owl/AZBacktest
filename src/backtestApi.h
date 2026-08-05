@@ -46,9 +46,11 @@ enum class TradeDirection { Long, Short };
 /// @brief parallel prices + volumes returned by Handling::requestDataWindow
 /// volumes[i] is per-bar traded size (tick size for timeframe=0, summed bar
 /// volume for timeframe>0) so it can be fed straight into returnVolumeProfile
+/// deltas[i] is prices[i] minus the price before it (0 for the very first bar ever seen)
 struct DataWindow {
     std::vector<float> prices;
     std::vector<float> volumes;
+    std::vector<float> deltas;
 };
 
 class Trade {
@@ -205,8 +207,10 @@ public:
         DataWindow out;
         out.prices.reserve(period);
         out.volumes.reserve(period);
+        out.deltas.reserve(period);
         windowTimestamps.clear();
         windowTimestamps.reserve(period);
+        std::optional<float> prevPx = _prices.empty() ? std::nullopt : std::optional<float>(_prices.back());
         if (timeframe==0) {
             for (int i=0; i<period; i++) {
                 std::optional<Tick> tick;
@@ -218,6 +222,8 @@ public:
                 float px = 0.f;
                 std::from_chars(tick->price.data(), tick->price.data() + tick->price.size(), px);
                 out.prices.push_back(px);
+                out.deltas.push_back(prevPx ? px - *prevPx : 0.f);
+                prevPx = px;
                 out.volumes.push_back(tick->size);
                 windowTimestamps.push_back(mdDetail::tsToEpochSeconds(tick->timestamp));
                 processedBars++;
@@ -229,6 +235,8 @@ public:
                 float px = 0.f;
                 std::from_chars(bar->price.data(), bar->price.data() + bar->price.size(), px);
                 out.prices.push_back(px);
+                out.deltas.push_back(prevPx ? px - *prevPx : 0.f);
+                prevPx = px;
                 out.volumes.push_back(bar->size);
                 windowTimestamps.push_back(mdDetail::tsToEpochSeconds(bar->timestamp));
                 processedBars++;
