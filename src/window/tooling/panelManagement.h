@@ -29,7 +29,8 @@ struct Series {
 struct Panel {
     std::string id;                  ///< unique id; also drives the ImGui window title
     std::vector<Series> children;    ///< series currently attached to this panel
-    bool axesLocked = true;          ///< true = x/y axes can't be panned or zoomed
+    bool axesLocked = false;         ///< true = x/y axes can't be panned or zoomed
+    bool axesAutoFit = true;         ///< true = x/y axes auto-fit to data extents every frame
 };
 
 /// @brief all active panels, rendered each frame by renderPanels()
@@ -97,6 +98,10 @@ inline void renderPanels() {
         std::string lockId = "Lock axes##lock_" + p.id;
         ImGui::Checkbox(lockId.c_str(), &p.axesLocked);
 
+        ImGui::SameLine();
+        std::string autoFitId = "Auto-fit axes##autofit_" + p.id;
+        ImGui::Checkbox(autoFitId.c_str(), &p.axesAutoFit);
+
         // Per-series toggle for which y-axis (left/Y1 vs right/Y2) each
         // series plots against, only shown once there's more than one
         // series to make the choice meaningful
@@ -113,18 +118,20 @@ inline void renderPanels() {
         }
 
         if (ImPlot::BeginPlot(p.id.c_str(), ImVec2(-1, -1))) {
-            // panning/zooming disabled on both axes by default; "Lock axes"
-            // above toggles it per-panel
+            // "Lock axes" / "Auto-fit axes" above toggle these per-panel;
+            // axes start unlocked + auto-fitting by default
             ImPlotAxisFlags lockFlags = p.axesLocked ? ImPlotAxisFlags_Lock : ImPlotAxisFlags_None;
+            ImPlotAxisFlags fitFlags  = p.axesAutoFit ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
+            ImPlotAxisFlags baseFlags = lockFlags | fitFlags;
 
             // Y2 stays hidden/auto-fit unless a series actually opts into it
-            ImPlotAxisFlags y2Flags = ImPlotAxisFlags_AuxDefault | lockFlags;
+            ImPlotAxisFlags y2Flags = ImPlotAxisFlags_AuxDefault | baseFlags;
             bool anyOnY2 = false;
             for (auto& c : p.children) if (c.onY2) { anyOnY2 = true; break; }
             if (!anyOnY2) y2Flags |= ImPlotAxisFlags_NoDecorations;
 
-            ImPlot::SetupAxis(ImAxis_X1, nullptr, lockFlags);
-            ImPlot::SetupAxis(ImAxis_Y1, nullptr, lockFlags);
+            ImPlot::SetupAxis(ImAxis_X1, nullptr, baseFlags);
+            ImPlot::SetupAxis(ImAxis_Y1, nullptr, baseFlags);
             ImPlot::SetupAxis(ImAxis_Y2, nullptr, y2Flags);
 
             for (auto& c : p.children) {
