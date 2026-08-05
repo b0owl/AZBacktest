@@ -118,6 +118,12 @@ inline void applyModernStyle() {
 
 inline GLFWwindow* createWindow() {
     glfwInit();
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#ifdef __APPLE__
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
     static GLFWwindow* window = glfwCreateWindow(1280, 720, "AZBacktest", nullptr, nullptr);
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
@@ -126,7 +132,7 @@ inline GLFWwindow* createWindow() {
     ImPlot::CreateContext();
     applyModernStyle();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 130");
+    ImGui_ImplOpenGL3_Init("#version 150");
 
     return window;
 }
