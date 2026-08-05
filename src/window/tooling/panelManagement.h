@@ -22,6 +22,7 @@ struct Series {
     bool unbound = false;
     seriesPool::RGBA color;  ///< -1 = let ImPlot pick
     bool legendHidden = false; ///< true = plot but don't show in legend
+    bool onY2 = false;         ///< true = plot against the secondary (right) y-axis
 };
 
 /// @brief a panel window that owns any number of child series
@@ -90,7 +91,30 @@ inline void renderPanels() {
             }
             ImGui::EndPopup();
         }
+
+        // Per-series toggle for which y-axis (left/Y1 vs right/Y2) each
+        // series plots against, only shown once there's more than one
+        // series to make the choice meaningful
+        if (p.children.size() > 1) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("Y2:");
+            for (size_t i = 0; i < p.children.size(); i++) {
+                auto& c = p.children[i];
+                if (c.legendHidden) continue;
+                ImGui::SameLine();
+                std::string cbId = c.label + "##y2_" + p.id + "_" + std::to_string(i);
+                ImGui::Checkbox(cbId.c_str(), &c.onY2);
+            }
+        }
+
         if (ImPlot::BeginPlot(p.id.c_str(), ImVec2(-1, -1))) {
+            // Y2 stays hidden/auto-fit unless a series actually opts into it
+            ImPlotAxisFlags y2Flags = ImPlotAxisFlags_AuxDefault;
+            bool anyOnY2 = false;
+            for (auto& c : p.children) if (c.onY2) { anyOnY2 = true; break; }
+            if (!anyOnY2) y2Flags |= ImPlotAxisFlags_NoDecorations;
+            ImPlot::SetupAxis(ImAxis_Y2, nullptr, y2Flags);
+
             for (auto& c : p.children) {
                 if (c.unbound) continue;
                 if (c.color.isSet()) {
@@ -98,6 +122,7 @@ inline void renderPanels() {
                     ImPlot::SetNextLineStyle(cv);
                     ImPlot::SetNextFillStyle(cv);
                 }
+                ImPlot::SetAxes(ImAxis_X1, c.onY2 ? ImAxis_Y2 : ImAxis_Y1);
                 if (c.kind == Line)
                     ImPlot::PlotLine(c.label.c_str(), c.data.data(), (int)c.data.size());
                 else
