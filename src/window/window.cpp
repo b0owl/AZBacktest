@@ -57,9 +57,10 @@ void newBarSeries(std::string panelId) {
 /// @param title window title (currently unused, window gets titled at creation)
 void showConsole(const char* title) {
     static GLFWwindow* window = windowManagement::createWindow();
-
-    int activePanelId = 0;
-    int activeWidgetId = 0;
+    // must run before the first ImGui::NewFrame() below, since that's when
+    // ImGui loads the .ini and fires these handlers to restore panels/widgets
+    panelManagement::registerSettingsHandler();
+    widgetManagement::registerSettingsHandler();
 
     while (!glfwWindowShouldClose(window)) {
         windowManagement::startFrame();
@@ -69,13 +70,12 @@ void showConsole(const char* title) {
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu("New")) {
                 if (ImGui::MenuItem("Panel")) {
-                    panelManagement::newPanel(std::to_string(activePanelId));
-                    newLineSeries(std::to_string(activePanelId));
-                    activePanelId++;
+                    std::string id = std::to_string(panelManagement::nextPanelId());
+                    panelManagement::newPanel(id);
+                    newLineSeries(id);
                 }
                 if (ImGui::MenuItem("Widget")) {
-                    widgetManagement::newWindow(std::to_string(activeWidgetId));
-                    activeWidgetId++;
+                    widgetManagement::newWindow(std::to_string(widgetManagement::nextWindowId()));
                 }
                 ImGui::EndMenu();
             }
