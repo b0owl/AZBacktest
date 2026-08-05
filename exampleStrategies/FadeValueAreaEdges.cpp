@@ -45,8 +45,10 @@ int main() {
     int i = 0;
     long long prevEpoch = 0;
     while (true) {
-        prices = h.requestDataWindow(md, batchSize, 30);
-        if (prices.empty()) break;
+        auto window = h.requestDataWindow(md, batchSize, 30);
+        if (window.prices.empty()) break;
+        prices = std::move(window.prices);
+        auto& volumes = window.volumes;
 
         for (int b = 0; b < (int)prices.size(); b++) {
             i++;
@@ -89,7 +91,7 @@ int main() {
             }
 
             dailyPrices.push_back(px);
-            dailyVolume.push_back(px);
+            dailyVolume.push_back(volumes[b]);
 
             if (i % 5000 == 0) { std::cout << "  bar " << i << " trades=" << trades.size() << "\n"; }
 

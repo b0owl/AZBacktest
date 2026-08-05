@@ -31,12 +31,14 @@
   #include <unistd.h>
 #endif
 
-/// @brief a single row from the CSV, just timestamp + price as string_views
-/// these point into the mmapped buffer so they're only valid as long as
-/// the MarketData object is alive, copy to std::string if you need to keep them
+/// @brief a single row from the CSV, timestamp + price as string_views into
+/// the mmapped buffer (only valid while MarketData is alive), plus a parsed
+/// volume. for nextTick, `size` is that tick's traded size; for nextClose,
+/// it's the summed volume across every tick in the bar
 struct Tick {
     std::string_view timestamp;
     std::string_view price;
+    float size = 0.f;
 };
 
 namespace mdDetail {
@@ -162,6 +164,28 @@ inline void twoFields(const char* start, const char* end, int c1, int c2,
     if (col == c2) f2 = std::string_view(fs, static_cast<size_t>(p - fs));
 }
 
+/// @brief three-field variant of twoFields, single-pass extraction of cols
+/// c1 <= c2 <= c3, used by nextTick which needs timestamp + price + size
+inline void threeFields(const char* start, const char* end, int c1, int c2, int c3,
+                        std::string_view& f1, std::string_view& f2, std::string_view& f3) {
+    const char* p  = start;
+    const char* fs = start;
+    int col = 0;
+    while (p < end) {
+        if (*p == ',') {
+            if (col == c1) f1 = std::string_view(fs, static_cast<size_t>(p - fs));
+            if (col == c2) f2 = std::string_view(fs, static_cast<size_t>(p - fs));
+            if (col == c3) { f3 = std::string_view(fs, static_cast<size_t>(p - fs)); return; }
+            ++col;
+            fs = p + 1;
+        }
+        ++p;
+    }
+    if (col == c1) f1 = std::string_view(fs, static_cast<size_t>(p - fs));
+    if (col == c2) f2 = std::string_view(fs, static_cast<size_t>(p - fs));
+    if (col == c3) f3 = std::string_view(fs, static_cast<size_t>(p - fs));
+}
+
 } // namespace mdDetail
 
 /// @brief streaming reader over a raw byte range, used internally by MarketData
@@ -248,12 +272,16 @@ public:
         const char* eol = mdDetail::findEOL(line, _end);
         _cur = (eol < _end) ? eol + 1 : _end;
         Tick t;
-        mdDetail::twoFields(line, eol,
-            kCSVMapping.timestampCol, kCSVMapping.priceCol, t.timestamp, t.price);
+        std::string_view szView;
+        mdDetail::threeFields(line, eol,
+            kCSVMapping.timestampCol, kCSVMapping.priceCol, kCSVMapping.sizeCol,
+            t.timestamp, t.price, szView);
+        std::from_chars(szView.data(), szView.data() + szView.size(), t.size);
         return t;
     }
 
-    /// @brief close tick of the next window covering at least `seconds`
+    /// @brief close tick of the next window covering at least `seconds`,
+    /// t.size is the summed volume across every tick that fell inside the bar
     /// @return the close tick (views into the underlying buffer), or nullopt at EOF
     std::optional<Tick> nextClose(int seconds) {
         _skipHeaderOnce();
@@ -263,8 +291,16 @@ public:
         _cur = (eol < _end) ? eol + 1 : _end;
 
         std::string_view firstTs = mdDetail::field(line, eol, kCSVMapping.timestampCol);
+        std::string_view firstSz = mdDetail::field(line, eol, kCSVMapping.sizeCol);
         std::string targetOwned  = mdDetail::endTimestamp(firstTs, seconds);
         std::string_view target(targetOwned);
+
+        float barVolume = 0.f;
+        {
+            float sz = 0.f;
+            std::from_chars(firstSz.data(), firstSz.data() + firstSz.size(), sz);
+            barVolume += sz;
+        }
 
         const char* lastLine = line;
         const char* lastEol  = eol;
@@ -279,11 +315,16 @@ public:
             lastLine = nline;
             lastEol  = neol;
             lastTs   = mdDetail::field(nline, neol, kCSVMapping.timestampCol);
+            std::string_view nsz = mdDetail::field(nline, neol, kCSVMapping.sizeCol);
+            float sz = 0.f;
+            std::from_chars(nsz.data(), nsz.data() + nsz.size(), sz);
+            barVolume += sz;
         }
 
         Tick t;
         t.timestamp = lastTs;
         t.price     = mdDetail::field(lastLine, lastEol, kCSVMapping.priceCol);
+        t.size      = barVolume;
         return t;
     }
 };
