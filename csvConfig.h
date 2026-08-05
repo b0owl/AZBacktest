@@ -45,7 +45,7 @@ inline constexpr CSVMapping kCSVMapping{
     0,                                                    // timestampCol
     8,                                                    // priceCol
     9,                                                    // size, aka volume at that tick
-    "Data/glbx-mdp3-20250601-20260514.tbbo.csv",          // path
+    "Placeholder Path",          // path
     { 0, 4, 5, 2, 8, 2 },                                 // dateFormat: Y off/len, M off/len, D off/len
     true,                                                 // skipHeader
     19,                                                    // symbolCol
