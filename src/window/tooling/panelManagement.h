@@ -23,6 +23,8 @@ struct Series {
     seriesPool::RGBA color;  ///< -1 = let ImPlot pick
     bool legendHidden = false; ///< true = plot but don't show in legend
     bool onY2 = false;         ///< true = plot against the secondary (right) y-axis
+    std::vector<float> xs;     ///< non-empty = explicit x per point (e.g. histogram), else index-based
+    float barWidth = 0.67f;    ///< only used when xs is non-empty
 };
 
 /// @brief a panel window that owns any number of child series
@@ -79,6 +81,10 @@ inline void renderPanels() {
             } else { // if a series was initlized, ->
                 for (auto& s : seriesPool::pool) {
                     if (ImGui::Selectable(s.name.c_str())) {
+                        if (s.xyBars) {
+                            p.children.push_back({Bar, s.name, s.data[1], false, s.color, false, s.onY2, s.data[0], s.barWidth});
+                            continue;
+                        }
                         for (int col = 0; col < s.cols(); col++) {
                             std::string label = s.cols() == 1
                                 ? s.name
@@ -144,6 +150,8 @@ inline void renderPanels() {
                 ImPlot::SetAxes(ImAxis_X1, c.onY2 ? ImAxis_Y2 : ImAxis_Y1);
                 if (c.kind == Line)
                     ImPlot::PlotLine(c.label.c_str(), c.data.data(), (int)c.data.size());
+                else if (!c.xs.empty())
+                    ImPlot::PlotBars(c.label.c_str(), c.xs.data(), c.data.data(), (int)c.data.size(), c.barWidth);
                 else
                     ImPlot::PlotBars(c.label.c_str(), c.data.data(), (int)c.data.size());
             }
