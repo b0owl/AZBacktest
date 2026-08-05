@@ -1,9 +1,11 @@
 #pragma once
 #include <GLFW/glfw3.h>
 #include "imgui.h"
+#include "imgui_internal.h" // ImGuiSettingsHandler / ImHashStr for ini persistence
 #include "implot.h"
 #include "string"
 #include "vector"
+#include <cstdlib>
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 
@@ -25,6 +27,13 @@ struct Series {
     bool onY2 = false;         ///< true = plot against the secondary (right) y-axis
     std::vector<float> xs;     ///< non-empty = explicit x per point (e.g. histogram), else index-based
     float barWidth = 0.67f;    ///< only used when xs is non-empty
+
+    // provenance, used to persist + restore this child from the .ini: which pool
+    // series it was pulled from (empty = raw data added via newLine/BarSeries,
+    // not restorable) and whether it came from the xyBars or per-column branch
+    std::string sourceSeries;
+    bool sourceXY = false;
+    int sourceCol = -1;
 };
 
 /// @brief a panel window that owns any number of child series
@@ -51,6 +60,38 @@ inline void newPanel(std::string id) {
     if (findPanel(id) == nullptr) {
         panels.push_back({id, {}});
     }
+}
+
+/// @brief lowest id not already in use, so newly-created panels don't collide
+/// with ones just restored from the .ini
+inline int nextPanelId() {
+    int maxId = -1;
+    for (auto& p : panels) {
+        char* endp = nullptr;
+        long v = std::strtol(p.id.c_str(), &endp, 10);
+        if (endp != p.id.c_str() && *endp == '\0' && v > maxId) maxId = (int)v;
+    }
+    return maxId + 1;
+}
+
+/// @brief build a panel child for one column of a pool series
+inline Series buildColumnChild(seriesPool::NamedSeries& s, int col, bool onY2) {
+    std::string label = s.cols() == 1 ? s.name : s.name + " [" + s.colName(col) + "]";
+    // for large multi-column series (clouds), hide individual legend entries
+    bool hide = s.cols() > 10 && col > 0;
+    if (hide) label = "##" + s.name + "_" + std::to_string(col);
+    Series c{s.type == 1 ? Bar : Line, label, s.data[col], false, s.color, hide, onY2};
+    c.sourceSeries = s.name;
+    c.sourceCol = col;
+    return c;
+}
+
+/// @brief build a panel child for an xyBars pool series (histogram-style)
+inline Series buildXYChild(seriesPool::NamedSeries& s, bool onY2) {
+    Series c{Bar, s.name, s.data[1], false, s.color, false, onY2, s.data[0], s.barWidth};
+    c.sourceSeries = s.name;
+    c.sourceXY = true;
+    return c;
 }
 
 /// @brief render every registered panel for the current ImGui frame
@@ -82,17 +123,10 @@ inline void renderPanels() {
                 for (auto& s : seriesPool::pool) {
                     if (ImGui::Selectable(s.name.c_str())) {
                         if (s.xyBars) {
-                            p.children.push_back({Bar, s.name, s.data[1], false, s.color, false, s.onY2, s.data[0], s.barWidth});
-                            continue;
-                        }
-                        for (int col = 0; col < s.cols(); col++) {
-                            std::string label = s.cols() == 1
-                                ? s.name
-                                : s.name + " [" + s.colName(col) + "]";
-                            // for large multi-column series (clouds), hide individual legend entries
-                            bool hide = s.cols() > 10 && col > 0;
-                            if (hide) label = "##" + s.name + "_" + std::to_string(col);
-                            p.children.push_back({s.type == 1 ? Bar : Line, label, s.data[col], false, s.color, hide, s.onY2});
+                            p.children.push_back(buildXYChild(s, s.onY2));
+                        } else {
+                            for (int col = 0; col < s.cols(); col++)
+                                p.children.push_back(buildColumnChild(s, col, s.onY2));
                         }
                     }
                 }
@@ -162,6 +196,74 @@ inline void renderPanels() {
         if (!open) { panels.erase(panels.begin() + pi); }
         else { ++pi; }
     }
+}
+
+/// @brief split on '|', used to decode the ini's Col=/XY= lines
+inline std::vector<std::string> splitPipe(const std::string& s) {
+    std::vector<std::string> parts;
+    size_t start = 0;
+    for (size_t p; (p = s.find('|', start)) != std::string::npos; start = p + 1)
+        parts.push_back(s.substr(start, p - start));
+    parts.push_back(s.substr(start));
+    return parts;
+}
+
+inline void* iniReadOpen(ImGuiContext*, ImGuiSettingsHandler*, const char* name) {
+    newPanel(name);
+    return (void*)findPanel(name);
+}
+
+inline void iniReadLine(ImGuiContext*, ImGuiSettingsHandler*, void* entry, const char* line) {
+    if (!entry) return;
+    Panel& p = *(Panel*)entry;
+    std::string ln(line);
+    size_t eq = ln.find('=');
+    if (eq == std::string::npos) return;
+    std::string key = ln.substr(0, eq), val = ln.substr(eq + 1);
+
+    if (key == "Locked")  { p.axesLocked  = (val != "0"); return; }
+    if (key == "AutoFit") { p.axesAutoFit = (val != "0"); return; }
+    if (key != "Col" && key != "XY") return;
+
+    auto parts = splitPipe(val);
+    auto* s = seriesPool::findSeries(parts[0]);
+    if (!s) return;
+
+    if (key == "XY") {
+        if (!s->xyBars || parts.size() < 2) return;
+        p.children.push_back(buildXYChild(*s, parts[1] == "1"));
+    } else {
+        if (parts.size() < 3) return;
+        int col = (int)std::strtol(parts[1].c_str(), nullptr, 10);
+        if (col < 0 || col >= s->cols()) return;
+        p.children.push_back(buildColumnChild(*s, col, parts[2] == "1"));
+    }
+}
+
+inline void iniWriteAll(ImGuiContext*, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf) {
+    for (auto& p : panels) {
+        buf->appendf("[%s][%s]\n", handler->TypeName, p.id.c_str());
+        buf->appendf("Locked=%d\n", p.axesLocked ? 1 : 0);
+        buf->appendf("AutoFit=%d\n", p.axesAutoFit ? 1 : 0);
+        for (auto& c : p.children) {
+            if (c.sourceSeries.empty()) continue;
+            if (c.sourceXY) buf->appendf("XY=%s|%d\n", c.sourceSeries.c_str(), c.onY2 ? 1 : 0);
+            else            buf->appendf("Col=%s|%d|%d\n", c.sourceSeries.c_str(), c.sourceCol, c.onY2 ? 1 : 0);
+        }
+        buf->appendf("\n");
+    }
+}
+
+/// @brief hook panels into ImGui's own .ini load/save so they auto-restore on
+/// startup; call once, before the first ImGui::NewFrame()
+inline void registerSettingsHandler() {
+    ImGuiSettingsHandler h;
+    h.TypeName   = "AZPanel";
+    h.TypeHash   = ImHashStr("AZPanel");
+    h.ReadOpenFn = iniReadOpen;
+    h.ReadLineFn = iniReadLine;
+    h.WriteAllFn = iniWriteAll;
+    ImGui::AddSettingsHandler(&h);
 }
 
 } // namespace panelManagement

@@ -1,7 +1,9 @@
 #pragma once
 #include "imgui.h"
+#include "imgui_internal.h" // ImGuiSettingsHandler / ImHashStr for ini persistence
 #include "string"
 #include "vector"
+#include <cstdlib>
 
 #include "seriesPool.h"
 #include "statPool.h"
@@ -48,6 +50,18 @@ inline void newWindow(std::string id) {
     if (findWindow(id) == nullptr) {
         windows.push_back({id, {}});
     }
+}
+
+/// @brief lowest id not already in use, so newly-created windows don't collide
+/// with ones just restored from the .ini
+inline int nextWindowId() {
+    int maxId = -1;
+    for (auto& w : windows) {
+        char* endp = nullptr;
+        long v = std::strtol(w.id.c_str(), &endp, 10);
+        if (endp != w.id.c_str() && *endp == '\0' && v > maxId) maxId = (int)v;
+    }
+    return maxId + 1;
 }
 
 /// @brief renders the popup that lists available widget types, if the user
@@ -243,6 +257,75 @@ inline void renderWindows() {
         if (!open) { windows.erase(windows.begin() + wi); }
         else { ++wi; }
     }
+}
+
+inline void* iniReadOpen(ImGuiContext*, ImGuiSettingsHandler*, const char* name) {
+    newWindow(name);
+    return (void*)findWindow(name);
+}
+
+inline void iniReadLine(ImGuiContext*, ImGuiSettingsHandler*, void* entry, const char* line) {
+    if (!entry) return;
+    WidgetWindow& w = *(WidgetWindow*)entry;
+    std::string ln(line);
+    size_t eq = ln.find('=');
+    if (eq == std::string::npos || ln.substr(0, eq) != "Widget") return;
+    std::string val = ln.substr(eq + 1);
+    size_t bar = val.find('|');
+    std::string kind = bar == std::string::npos ? val : val.substr(0, bar);
+    std::string payload = bar == std::string::npos ? "" : val.substr(bar + 1);
+
+    if (kind == "SeriesExplorer") {
+        Widget widget{SeriesExplorer, "Series Explorer"};
+        for (int i = 0; i < (int)seriesPool::pool.size(); i++)
+            if (seriesPool::pool[i].name == payload) { widget.selectedSeriesIdx = i; break; }
+        w.children.push_back(widget);
+    } else if (kind == "StatisticExplorer") {
+        Widget widget{StatisticExplorer, "Statistic Explorer"};
+        for (size_t start = 0; start <= payload.size(); ) {
+            size_t comma = payload.find(',', start);
+            std::string name = payload.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+            for (int i = 0; i < (int)statPool::pool.size(); i++)
+                if (!name.empty() && statPool::pool[i].name == name) { widget.selectedStatIdxs.push_back(i); break; }
+            if (comma == std::string::npos) break;
+            start = comma + 1;
+        }
+        w.children.push_back(widget);
+    }
+}
+
+inline void iniWriteAll(ImGuiContext*, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf) {
+    for (auto& w : windows) {
+        buf->appendf("[%s][%s]\n", handler->TypeName, w.id.c_str());
+        for (auto& c : w.children) {
+            if (c.kind == SeriesExplorer) {
+                std::string name = (c.selectedSeriesIdx >= 0 && c.selectedSeriesIdx < (int)seriesPool::pool.size())
+                    ? seriesPool::pool[c.selectedSeriesIdx].name : "";
+                buf->appendf("Widget=SeriesExplorer|%s\n", name.c_str());
+            } else {
+                std::string joined;
+                for (int idx : c.selectedStatIdxs) {
+                    if (idx < 0 || idx >= (int)statPool::pool.size()) continue;
+                    if (!joined.empty()) joined += ",";
+                    joined += statPool::pool[idx].name;
+                }
+                buf->appendf("Widget=StatisticExplorer|%s\n", joined.c_str());
+            }
+        }
+        buf->appendf("\n");
+    }
+}
+
+/// @brief hook widget windows into ImGui's own .ini load/save so they
+/// auto-restore on startup; call once, before the first ImGui::NewFrame()
+inline void registerSettingsHandler() {
+    ImGuiSettingsHandler h;
+    h.TypeName   = "AZWidget";
+    h.TypeHash   = ImHashStr("AZWidget");
+    h.ReadOpenFn = iniReadOpen;
+    h.ReadLineFn = iniReadLine;
+    h.WriteAllFn = iniWriteAll;
+    ImGui::AddSettingsHandler(&h);
 }
 
 } // namespace widgetManagement
