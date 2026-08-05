@@ -36,9 +36,14 @@
 /// volume. for nextTick, `size` is that tick's traded size; for nextClose,
 /// it's the summed volume across every tick in the bar
 struct Tick {
+
     std::string_view timestamp;
     std::string_view price;
     float size = 0.f;
+    const char* side = kCSVMapping.unknownSideAggressorAlias;
+    float executedBuys   = 0.f;
+    float executedSells  = 0.f;
+    float unknownVolume  = 0.f;
 };
 
 namespace mdDetail {
