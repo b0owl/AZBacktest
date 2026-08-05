@@ -28,6 +28,15 @@ OUT="$SCRIPT_DIR/azbacktest.h"
     # tell GLFW to skip its GL include and let the real loader do its job.
     echo "#define GLFW_INCLUDE_NONE"
     echo ""
+    # The code below uses std::optional/std::from_chars/etc (C++17). Compilers
+    # default to an older standard when no -std flag is passed (e.g. Apple
+    # clang defaults to C++14), which would otherwise fail with a wall of
+    # confusing "no member named 'optional' in namespace std" errors instead
+    # of telling you what's actually wrong.
+    echo "#if __cplusplus < 201703L"
+    echo "#error \"AZBacktest requires C++17 or later. Compile with -std=c++17 (or newer), e.g.: g++ -std=c++17 main.cpp ...\""
+    echo "#endif"
+    echo ""
 } > "$OUT"
 
 # Files in dependency order
