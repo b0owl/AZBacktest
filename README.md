@@ -1,5 +1,11 @@
 # AZBacktest
 
+TODOS:
+    Overlapping trade support
+    Read-From-CSV option for UI (less restarting the visualizer)
+    More built-in price derived data
+    Codebase refactoring
+
 C++17 backtesting framework. Header-only API with an ImGui/ImPlot visualization window.
 
 ## Build
