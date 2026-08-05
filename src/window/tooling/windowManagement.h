@@ -124,6 +124,7 @@ inline GLFWwindow* createWindow() {
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
+    glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
     static GLFWwindow* window = glfwCreateWindow(1280, 720, "AZBacktest", nullptr, nullptr);
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
