@@ -46,9 +46,11 @@ enum class TradeDirection { Long, Short };
 /// @brief parallel prices + volumes returned by Handling::requestDataWindow
 /// volumes[i] is per-bar traded size (tick size for timeframe=0, summed bar
 /// volume for timeframe>0) so it can be fed straight into returnVolumeProfile
+/// deltas[i] is executedBuys[i] minus executedSells[i] (orderflow delta)
 struct DataWindow {
     std::vector<float> prices;
     std::vector<float> volumes;
+    std::vector<float> deltas;
 };
 
 class Trade {
@@ -205,6 +207,7 @@ public:
         DataWindow out;
         out.prices.reserve(period);
         out.volumes.reserve(period);
+        out.deltas.reserve(period);
         windowTimestamps.clear();
         windowTimestamps.reserve(period);
         if (timeframe==0) {
@@ -218,6 +221,7 @@ public:
                 float px = 0.f;
                 std::from_chars(tick->price.data(), tick->price.data() + tick->price.size(), px);
                 out.prices.push_back(px);
+                out.deltas.push_back(tick->executedBuys - tick->executedSells);
                 out.volumes.push_back(tick->size);
                 windowTimestamps.push_back(mdDetail::tsToEpochSeconds(tick->timestamp));
                 processedBars++;
@@ -229,6 +233,7 @@ public:
                 float px = 0.f;
                 std::from_chars(bar->price.data(), bar->price.data() + bar->price.size(), px);
                 out.prices.push_back(px);
+                out.deltas.push_back(bar->executedBuys - bar->executedSells);
                 out.volumes.push_back(bar->size);
                 windowTimestamps.push_back(mdDetail::tsToEpochSeconds(bar->timestamp));
                 processedBars++;
