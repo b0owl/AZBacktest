@@ -2,4 +2,6 @@
 /src/window/imgui.ini
 imgui.ini
 /azbacktest.h
+*.csv
+*.DS_Store
 config.toml
