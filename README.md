@@ -1,5 +1,8 @@
 # AZBacktest
 
+Note: Header file in the releases tab is frequently *outdated!*  
+For this reason it is recommended to build the project yourself (unless you want the stable, non feature rich version).  
+
 TODOS:  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Overlapping trade support  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Read-From-CSV option for UI (less restarting the visualizer)  
