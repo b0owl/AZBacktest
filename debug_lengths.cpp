@@ -15,8 +15,10 @@ int main() {
     int barsSinceProfile = 0, i = 0;
 
     while (true) {
-        prices = h.requestDataWindow(md, 500, 30);
-        if (prices.empty()) break;
+        auto window = h.requestDataWindow(md, 500, 30);
+        if (window.prices.empty()) break;
+        prices = std::move(window.prices);
+        auto& volumes = window.volumes;
         for (int b = 0; b < (int)prices.size(); b++) {
             i++;
             float px = prices[b];
@@ -35,7 +37,7 @@ int main() {
                 currentDay = day; dailyPrices.clear(); dailyVolume.clear();
                 val = vah = 0.f; barsSinceProfile = 0;
             }
-            dailyPrices.push_back(px); dailyVolume.push_back(px);
+            dailyPrices.push_back(px); dailyVolume.push_back(volumes[b]);
             if (tod - rthOpen < warmupSecs) continue;
             barsSinceProfile++;
             if (barsSinceProfile >= 50 || val == 0.f) {

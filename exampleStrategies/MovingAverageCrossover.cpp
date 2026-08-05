@@ -27,7 +27,10 @@ int main() {
     while (auto tick = md.nextTick()) {
         i++;
 
-        if (i % 500 == 0) { prices = h.requestDataWindow(md, 500, 60); // loads 500 rows, 60s tf }
+        if (i % 500 == 0) { // loads 500 rows, 60s tf
+            auto window = h.requestDataWindow(md, 500, 60);
+            prices = std::move(window.prices);
+        }
         if (i % 1000 == 0) { std::cout << "  bar " << i << " trades=" << trades.size() << "\n"; } // counter
 
         // Check window size

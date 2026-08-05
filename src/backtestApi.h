@@ -43,6 +43,14 @@ float realizedProfit = 0.f;
 /// @brief which side a trade is on, flips the sign on P&L math
 enum class TradeDirection { Long, Short };
 
+/// @brief parallel prices + volumes returned by Handling::requestDataWindow
+/// volumes[i] is per-bar traded size (tick size for timeframe=0, summed bar
+/// volume for timeframe>0) so it can be fed straight into returnVolumeProfile
+struct DataWindow {
+    std::vector<float> prices;
+    std::vector<float> volumes;
+};
+
 class Trade {
 private:
     float _entryPrice;
@@ -184,14 +192,17 @@ public:
 
     // Data processing
     int processedBars = 0;
-    /// @brief pull `period` prices from the market data source, if timeframe is 0
-    /// it reads raw ticks; otherwise it reads closes at that many seconds per bar
+    /// @brief pull `period` bars from the market data source, if timeframe is 0
+    /// it reads raw ticks; otherwise it reads closes at that many seconds per bar.
+    /// returns parallel prices + volumes, callers usually std::move prices into
+    /// their `Handling`-bound vector and feed volumes into returnVolumeProfile
     /// @param md       the MarketData source to read from
     /// @param period   how many rows/bars to load
     /// @param timeframe 0 = tick-by-tick, >0 = close every N seconds
-    std::vector<float> requestDataWindow(MarketData& md, int period, int timeframe=0) {
-        std::vector<float> window;
-        window.reserve(period);
+    DataWindow requestDataWindow(MarketData& md, int period, int timeframe=0) {
+        DataWindow out;
+        out.prices.reserve(period);
+        out.volumes.reserve(period);
         windowTimestamps.clear();
         windowTimestamps.reserve(period);
         if (timeframe==0) {
@@ -200,7 +211,8 @@ public:
                 if (!tick) break;
                 float px = 0.f;
                 std::from_chars(tick->price.data(), tick->price.data() + tick->price.size(), px);
-                window.push_back(px);
+                out.prices.push_back(px);
+                out.volumes.push_back(tick->size);
                 windowTimestamps.push_back(mdDetail::tsToEpochSeconds(tick->timestamp));
                 processedBars++;
             }
@@ -210,12 +222,13 @@ public:
                 if (!bar) break;
                 float px = 0.f;
                 std::from_chars(bar->price.data(), bar->price.data() + bar->price.size(), px);
-                window.push_back(px);
+                out.prices.push_back(px);
+                out.volumes.push_back(bar->size);
                 windowTimestamps.push_back(mdDetail::tsToEpochSeconds(bar->timestamp));
                 processedBars++;
             }
         }
-        return window;
+        return out;
     }
 };
 
