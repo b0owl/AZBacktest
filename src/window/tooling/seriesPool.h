@@ -40,6 +40,12 @@ inline std::vector<NamedSeries> pool;
 /// @brief wipe the pool so you can start fresh (e.g. between backtests)
 inline void clear() { pool.clear(); }
 
+/// @brief find a series by name, or nullptr if it doesn't exist
+inline NamedSeries* findSeries(const std::string& name) {
+    for (auto& s : pool) if (s.name == name) return &s;
+    return nullptr;
+}
+
 /// @brief add a 1D series (single column) to the pool
 /// @param name  display name for the series
 /// @param values the data, any arithmetic type gets converted to float
