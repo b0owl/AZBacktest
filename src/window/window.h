@@ -1,3 +1,3 @@
 #pragma once
 
-int showConsole(const char* title);
+void showConsole(const char* title);

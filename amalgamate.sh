@@ -15,17 +15,36 @@ OUT="$SCRIPT_DIR/azbacktest.h"
     echo "// mapping is... somewhere below. Sorry! (search for kCSVMapping)"
     echo "#pragma once"
     echo ""
+    # Amalgamation merges every vendor .cpp into one TU and strips local
+    # #includes, so imgui.h's ImVec2 math operators only ever get emitted
+    # once (when imgui.h itself is first concatenated). Must be defined
+    # before that point, not later inside imgui.cpp/imgui_draw.cpp etc.
+    echo "#define IMGUI_DEFINE_MATH_OPERATORS"
+    # GLFW auto-#includes the system's legacy <OpenGL/gl.h>, which defines
+    # GL_VERSION_1_x macros but not the PFNGL*PROC typedefs. ImGui's gl3w-based
+    # loader (imgui_impl_opengl3_loader.h) guards its own typedefs on those same
+    # macros being *unset*, assuming a real loader header defined them instead.
+    # In separate-TU builds this never collides; here everything's one TU, so
+    # tell GLFW to skip its GL include and let the real loader do its job.
+    echo "#define GLFW_INCLUDE_NONE"
+    echo ""
 } > "$OUT"
 
 # Files in dependency order
+# NOTE: imstb_rectpack.h / imstb_truetype.h / imstb_textedit.h are NOT listed
+# here. Upstream, they're only ever #include'd from inside imgui_draw.cpp and
+# imgui_widgets.cpp -- each time wrapped in surrounding macro/namespace setup
+# that configures how that inclusion compiles (imstb_textedit.h is even
+# #include'd twice: once in "header" mode, once in "implementation" mode with
+# the ImStb::STB_TEXTEDIT_* callbacks defined in between). Concatenating them
+# as standalone files here would emit them with none of that context, so
+# instead their real content gets inlined directly at each #include site
+# below (see inline_stb).
 FILES=(
     # vendor
     "$SCRIPT_DIR/vendor/imgui/imconfig.h"
     "$SCRIPT_DIR/vendor/imgui/imgui.h"
     "$SCRIPT_DIR/vendor/imgui/imgui_internal.h"
-    "$SCRIPT_DIR/vendor/imgui/imstb_rectpack.h"
-    "$SCRIPT_DIR/vendor/imgui/imstb_textedit.h"
-    "$SCRIPT_DIR/vendor/imgui/imstb_truetype.h"
     "$SCRIPT_DIR/vendor/imgui/imgui.cpp"
     "$SCRIPT_DIR/vendor/imgui/imgui_draw.cpp"
     "$SCRIPT_DIR/vendor/imgui/imgui_tables.cpp"
@@ -52,12 +71,50 @@ FILES=(
     "$SCRIPT_DIR/src/window/window.cpp"
 )
 
+# Replace every line matching $2 in $1 with the literal contents of $3.
+# Used to inline the imstb_*.h STB libs at their real #include sites instead
+# of dropping the include line, since those sites carry macro/namespace
+# context those libs depend on (see FILES comment above).
+inline_stb() {
+    awk -v pat="$2" -v cfile="$3" '
+        $0 ~ pat { while ((getline line < cfile) > 0) print line; close(cfile); next }
+        { print }
+    ' "$1"
+}
+
+STB_RECTPACK="$SCRIPT_DIR/vendor/imgui/imstb_rectpack.h"
+STB_TRUETYPE="$SCRIPT_DIR/vendor/imgui/imstb_truetype.h"
+STB_TEXTEDIT="$SCRIPT_DIR/vendor/imgui/imstb_textedit.h"
+GL3W_LOADER="$SCRIPT_DIR/vendor/imgui/backends/imgui_impl_opengl3_loader.h"
+
 for f in "${FILES[@]}"; do
     rel="${f#$SCRIPT_DIR/}"
     echo "" >> "$OUT"
     echo "// ---- $rel ----" >> "$OUT"
-    # strip #pragma once and local includes, keep everything else
-    sed -E '/^#pragma once/d; /^[[:space:]]*#include[[:space:]]*"/d' "$f" >> "$OUT"
+
+    case "$rel" in
+        vendor/imgui/imgui_draw.cpp)
+            inline_stb "$f" '#include "imstb_rectpack.h"' "$STB_RECTPACK" \
+                | inline_stb - '#include "imstb_truetype.h"' "$STB_TRUETYPE" \
+                | sed -E '/^#pragma once/d; /^[[:space:]]*#include[[:space:]]*"/d' >> "$OUT"
+            ;;
+        vendor/imgui/imgui_widgets.cpp)
+            # both occurrences (header mode + implementation mode) get the
+            # same literal content inlined
+            inline_stb "$f" '#include "imstb_textedit.h"' "$STB_TEXTEDIT" \
+                | sed -E '/^#pragma once/d; /^[[:space:]]*#include[[:space:]]*"/d' >> "$OUT"
+            ;;
+        vendor/imgui/backends/imgui_impl_opengl3.cpp)
+            # same story: the gl3w-based loader is #include'd right after
+            # #define IMGL3W_IMPL, providing imgl3wInit()/modern GL decls
+            inline_stb "$f" '#include "imgui_impl_opengl3_loader.h"' "$GL3W_LOADER" \
+                | sed -E '/^#pragma once/d; /^[[:space:]]*#include[[:space:]]*"/d' >> "$OUT"
+            ;;
+        *)
+            # strip #pragma once and local includes, keep everything else
+            sed -E '/^#pragma once/d; /^[[:space:]]*#include[[:space:]]*"/d' "$f" >> "$OUT"
+            ;;
+    esac
 done
 
 echo "wrote $OUT"
