@@ -20,6 +20,8 @@ struct NamedSeries {
     int type;                                   ///< 0 = lineplot, 1 = barplot
     RGBA color;                                 ///< all columns share this color, -1 = auto
     bool onY2 = false;                          ///< default axis when added to a panel, right (Y2) vs left (Y1)
+    bool xyBars = false;                        ///< true = data[0] is x, data[1] is y (e.g. a histogram) instead of index-based x
+    float barWidth = 0.67f;                     ///< only used when xyBars is set
 
     int cols() const { return (int)data.size(); }       ///< number of columns (1 for a simple series)
     int rows() const { return data.empty() ? 0 : (int)data[0].size(); } ///< number of data points per column
@@ -64,6 +66,22 @@ void addSeries(std::string name, std::vector<std::vector<T>> values,
         cols.emplace_back(v.begin(), v.end());
     }
     pool.push_back({std::move(name), std::move(cols), std::move(colNames), type, color, onY2});
+}
+
+/// @brief add an (x,y) bar series, e.g. a histogram: xs=bucket value, ys=occurrences
+/// @param name     display name for the series
+/// @param xs       x-coordinate per bar (e.g. bucket edges)
+/// @param ys       bar height per x (e.g. counts), same length as xs
+/// @param barWidth width of each bar in x-axis units
+template<typename Tx, typename Ty, typename = std::enable_if_t<std::is_arithmetic_v<Tx> && std::is_arithmetic_v<Ty>>>
+void addXYBars(std::string name, std::vector<Tx> xs, std::vector<Ty> ys, float barWidth = 0.67f,
+               RGBA color = {}, bool onY2 = false) {
+    std::vector<float> xf(xs.begin(), xs.end());
+    std::vector<float> yf(ys.begin(), ys.end());
+    NamedSeries s{std::move(name), {std::move(xf), std::move(yf)}, {}, 1, color, onY2};
+    s.xyBars = true;
+    s.barWidth = barWidth;
+    pool.push_back(std::move(s));
 }
 
 /// @brief batch init for the simple case where each inner vector is its own
