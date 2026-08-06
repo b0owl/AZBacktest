@@ -2,6 +2,8 @@
 
 # AZBacktest
 
+**Before building, edit `csvConfig.h` to map your CSV columns and set the data path. The file ships with placeholder values that will not compile until filled in.**
+
 Release convention:  
 -> Every small feature *and* bugfix will result in an increment to the last number in the version name (i.e 1.0.0 to 1.0.1).  
 -> Every big feature will result in an increment to the middle number in the version name.  
@@ -45,19 +47,19 @@ Note: If you use the header file (from releases) you'd have to search for the ma
 
 ```cpp
 inline constexpr CSVMapping kCSVMapping{
-    0,                              // timestampCol
-    8,                              // priceCol
-    9,                              // sizeCol (volume)
-    6,                              // aggressor (side column)
-    "Data/your-file.csv",           // path (relative to project root)
-    { 0, 4, 5, 2, 8, 2 },          // dateFormat: year off/len, month off/len, day off/len
-    true,                           // skipHeader
-    -1,                             // symbolCol
-    "",                             // symbol
-    false,                          // symbolRoll
-    "B",                            // buySideAggressorAlias
-    "A",                            // sellSideAggressorAlias
-    "N",                            // unknownSideAggressorAlias
+    PLACEHOLDER_VALUE,              // timestampCol (int)
+    PLACEHOLDER_VALUE,              // priceCol (int)
+    PLACEHOLDER_VALUE,              // sizeCol (int)
+    PLACEHOLDER_VALUE,              // path (const char*)
+    { PLACEHOLDER_VALUE },          // dateFormat (DateFormat: yearOff, yearLen, monthOff, monthLen, dayOff, dayLen)
+    PLACEHOLDER_VALUE,              // skipHeader (bool)
+    PLACEHOLDER_VALUE,              // symbolCol (int, -1 to disable)
+    PLACEHOLDER_VALUE,              // symbol (const char*)
+    PLACEHOLDER_VALUE,              // symbolRoll (bool)
+    PLACEHOLDER_VALUE,              // aggressor (int)
+    PLACEHOLDER_VALUE,              // buySideAggressorAlias (const char*)
+    PLACEHOLDER_VALUE,              // sellSideAggressorAlias (const char*)
+    PLACEHOLDER_VALUE,              // unknownSideAggressorAlias (const char*)
 };
 ```
 
