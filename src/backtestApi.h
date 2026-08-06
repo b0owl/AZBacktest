@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include "marketData.h"
 #include "csvConfig.h"
+#include "findEOF.h"
 
 /// @brief result of a single closed trade, profit, win/loss, and when it closed
 /// gets pushed into the global `trades` vec when a Trade is locked
@@ -280,6 +281,12 @@ public:
         return out;
     }
 
+    // other helper funcs and such
+
+    int eof = -1; // set to -1 before user requests it
+    void fetchEOF(int timeframe=1, int strideIncrement=2) {
+        eof = findEof(kCSVMapping.path, timeframe, strideIncrement);
+    }
 };
 
 // ---- COMPILED DATA START ---- //

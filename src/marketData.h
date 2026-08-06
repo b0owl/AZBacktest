@@ -287,6 +287,15 @@ public:
     _MarketData(const char* data, std::size_t size)
         : _cur(data), _end(data + size) {}
 
+    // skip past one line without parsing, returns false at EOF
+    bool skipLine() {
+        _skipHeaderOnce();
+        if (_cur >= _end) return false;
+        const char* eol = mdDetail::findEOL(_cur, _end);
+        _cur = (eol < _end) ? eol + 1 : _end;
+        return true;
+    }
+
     /// @brief next tick from the file (header skipped on first call)
     /// @return the next tick as views into the underlying buffer, or nullopt at EOF
     std::optional<Tick> nextTick() {
@@ -439,6 +448,8 @@ public:
     // copying would double-free the mapping
     MarketData(const MarketData&)            = delete;
     MarketData& operator=(const MarketData&) = delete;
+
+    bool skipLine()                             { return _inner.skipLine(); }
 
     /// @brief next raw tick from the CSV, returns nullopt at EOF
     std::optional<Tick> nextTick()             { return _inner.nextTick(); }
