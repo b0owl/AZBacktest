@@ -20,9 +20,29 @@
 #include <random>
 #include <iostream>
 #include <unordered_map>
+#include <variant>
 #include "marketData.h"
 #include "csvConfig.h"
 #include "findEOF.h"
+
+
+/// @brief config function, makes setting up cleaner
+/// @param tickSize self explanatory
+/// @param tickValue self explanatory
+struct Engine {
+    std::vector<float> prices;
+    MarketData md;
+    Handling h;
+
+    Engine(float tickSize, float tickValue)
+        : md(kCSVMapping.path)
+        , h(prices, tickSize, tickValue) {}
+};
+
+Engine setupEngine(float tickSize, float tickValue) {
+    return Engine(tickSize, tickValue);
+}
+
 
 /// @brief result of a single closed trade, profit, win/loss, and when it closed
 /// gets pushed into the global `trades` vec when a Trade is locked

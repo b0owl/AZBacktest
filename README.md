@@ -1,7 +1,18 @@
+<img width="2048" height="1332" alt="image" src="https://github.com/user-attachments/assets/5096c757-2daf-478e-bc54-aa1de24dad1e" />
+
 # AZBacktest
 
-Note: Header file in the releases tab is frequently *outdated!*  
-For this reason it is recommended to build the project yourself (unless you want the stable, non feature rich version).  
+Release convention:  
+-> Every small feature *and* bugfix will result in an increment to the last number in the version name (i.e 1.0.0 to 1.0.1).  
+-> Every big feature will result in an increment to the middle number in the version name.  
+-> Once enough features pile on, the first number in the version name will be incremented while the last two are reset to zero.  
+
+Commit convention/notes:  
+-> Commits are rarely fully tested before release, and frequently have multiple follow up commits fixing issues / speed.  
+-> These unstable commits were previously committed to the main branch. As of 8/6/26 that has changed, an unstable branch has been created.  
+-> All commits that are not submitted by b0owl are to be added to the unstable branch, and eventually merged with main.  
+-> It would be unwise to try and build the header file from the unstable branch, unless it includes an in-progress feature your project requires.  
+-> If you are looking for an earlier version of  the project (created before the aforementioned date) scan the commit messages for the most stable version.  
 
 TODOS:  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Overlapping trade support  
