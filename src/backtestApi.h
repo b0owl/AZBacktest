@@ -18,6 +18,7 @@
 #include <charconv>
 #include <algorithm>
 #include <random>
+#include <iostream>
 #include <unordered_map>
 #include "marketData.h"
 #include "csvConfig.h"
@@ -50,6 +51,8 @@ enum class TradeDirection { Long, Short };
 struct DataWindow {
     std::vector<float> prices;
     std::vector<float> volumes;
+    std::vector<float> execBids; // executed bids
+    std::vector<float> execAsks; // executed asks
     std::vector<float> deltas;
 };
 
@@ -203,10 +206,19 @@ public:
     /// @param timeframe 0 = tick-by-tick, >0 = close every N seconds
     /// @param tickRes  timeframe==0 only: 1 = full resolution, how many raw ticks
     /// get read (and discarded) between each kept tick, to downsample tick-by-tick data
-    DataWindow requestDataWindow(MarketData& md, int period, int timeframe=0, int tickRes=1) {
+    DataWindow requestDataWindow(MarketData& md, int period, void (*whenUnknown)(),
+                                bool supressWarnings=false, int timeframe=0, int tickRes=1) {
+
+        if (!supressWarnings) {
+            std::cout << "Warning! If tickRes is above one, classifying volume by bids/asks will not work properly" << std::endl;
+            std::cout << "Supress these warnings by caling with the third argument being false" << std::endl;
+        }
+
         DataWindow out;
         out.prices.reserve(period);
         out.volumes.reserve(period);
+        out.execAsks.reserve(period);
+        out.execBids.reserve(period);
         out.deltas.reserve(period);
         windowTimestamps.clear();
         windowTimestamps.reserve(period);
@@ -226,6 +238,18 @@ public:
                 prevPx = px;
                 out.volumes.push_back(tick->size);
                 windowTimestamps.push_back(mdDetail::tsToEpochSeconds(tick->timestamp));
+
+                // calc execAsks/Bids from aggresor
+                if (tick->side == kCSVMapping.buySideAggressorAlias) { // hitting ask, buy
+                    out.execBids.push_back(tick->size); } 
+        
+                else if (tick->side == kCSVMapping.sellSideAggressorAlias) { // hitting bid, sell
+                    out.execAsks.push_back(tick->size); }
+                
+                else if (tick->side == kCSVMapping.unknownSideAggressorAlias) { // unknown
+                    whenUnknown(); } // called when the side is unknown to allow for custom behavior 
+                                     // cleanest solution, imo
+
                 processedBars++;
             }
         } else {
@@ -239,6 +263,17 @@ public:
                 prevPx = px;
                 out.volumes.push_back(bar->size);
                 windowTimestamps.push_back(mdDetail::tsToEpochSeconds(bar->timestamp));
+
+                // calc execAsks/Bids from aggresor
+                if (bar->side == kCSVMapping.buySideAggressorAlias) {
+                    out.execBids.push_back(bar->size); }
+
+                else if (bar->side == kCSVMapping.sellSideAggressorAlias) {
+                    out.execAsks.push_back(bar->size); }
+
+                else if (bar->side == kCSVMapping.unknownSideAggressorAlias) {
+                    whenUnknown(); }
+
                 processedBars++;
             }
         }

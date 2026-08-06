@@ -39,6 +39,7 @@ struct Tick {
     std::string_view timestamp;
     std::string_view price;
     float size = 0.f;
+    const char* side = kCSVMapping.unknownSideAggressorAlias;
 };
 
 namespace mdDetail {
@@ -186,6 +187,29 @@ inline void threeFields(const char* start, const char* end, int c1, int c2, int 
     if (col == c3) f3 = std::string_view(fs, static_cast<size_t>(p - fs));
 }
 
+/// @brief four-field variant, single-pass extraction of cols c1 <= c2 <= c3 <= c4
+inline void fourFields(const char* start, const char* end, int c1, int c2, int c3, int c4,
+                       std::string_view& f1, std::string_view& f2, std::string_view& f3, std::string_view& f4) {
+    const char* p  = start;
+    const char* fs = start;
+    int col = 0;
+    while (p < end) {
+        if (*p == ',') {
+            if (col == c1) f1 = std::string_view(fs, static_cast<size_t>(p - fs));
+            if (col == c2) f2 = std::string_view(fs, static_cast<size_t>(p - fs));
+            if (col == c3) f3 = std::string_view(fs, static_cast<size_t>(p - fs));
+            if (col == c4) { f4 = std::string_view(fs, static_cast<size_t>(p - fs)); return; }
+            ++col;
+            fs = p + 1;
+        }
+        ++p;
+    }
+    if (col == c1) f1 = std::string_view(fs, static_cast<size_t>(p - fs));
+    if (col == c2) f2 = std::string_view(fs, static_cast<size_t>(p - fs));
+    if (col == c3) f3 = std::string_view(fs, static_cast<size_t>(p - fs));
+    if (col == c4) f4 = std::string_view(fs, static_cast<size_t>(p - fs));
+}
+
 } // namespace mdDetail
 
 /// @brief streaming reader over a raw byte range, used internally by MarketData
@@ -272,11 +296,13 @@ public:
         const char* eol = mdDetail::findEOL(line, _end);
         _cur = (eol < _end) ? eol + 1 : _end;
         Tick t;
-        std::string_view szView;
-        mdDetail::threeFields(line, eol,
-            kCSVMapping.timestampCol, kCSVMapping.priceCol, kCSVMapping.sizeCol,
-            t.timestamp, t.price, szView);
+        std::string_view sideView, szView;
+        mdDetail::fourFields(line, eol,
+            kCSVMapping.timestampCol, kCSVMapping.aggressor, kCSVMapping.priceCol, kCSVMapping.sizeCol,
+            t.timestamp, sideView, t.price, szView);
         std::from_chars(szView.data(), szView.data() + szView.size(), t.size);
+        if (sideView == kCSVMapping.buySideAggressorAlias) t.side = kCSVMapping.buySideAggressorAlias;
+        else if (sideView == kCSVMapping.sellSideAggressorAlias) t.side = kCSVMapping.sellSideAggressorAlias;
         return t;
     }
 

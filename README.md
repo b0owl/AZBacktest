@@ -37,9 +37,16 @@ inline constexpr CSVMapping kCSVMapping{
     0,                              // timestampCol
     8,                              // priceCol
     9,                              // sizeCol (volume)
+    6,                              // aggressor (side column)
     "Data/your-file.csv",           // path (relative to project root)
     { 0, 4, 5, 2, 8, 2 },          // dateFormat: year off/len, month off/len, day off/len
     true,                           // skipHeader
+    -1,                             // symbolCol
+    "",                             // symbol
+    false,                          // symbolRoll
+    "B",                            // buySideAggressorAlias
+    "A",                            // sellSideAggressorAlias
+    "N",                            // unknownSideAggressorAlias
 };
 ```
 
@@ -51,7 +58,7 @@ inline constexpr CSVMapping kCSVMapping{
 Memory-maps a CSV file for zero-copy tick reading.
 
 #### `std::optional<Tick> MarketData::nextTick()`
-Returns the next raw tick (timestamp + price as string_views), or `nullopt` at EOF.
+Returns the next raw tick (timestamp + price as string_views, size, and aggressor side), or `nullopt` at EOF. The `side` field is a `const char*` set to the matching aggressor alias from `csvConfig.h`.
 
 #### `std::optional<Tick> MarketData::nextClose(int seconds)`
 Returns the close tick of the next bar spanning at least `seconds`. Skips forward until the timestamp exceeds start + seconds.
@@ -90,12 +97,17 @@ Advances the open trade's P&L to current price and records an equity curve sampl
 
 - `timestamp` — if non-empty, gets parsed for equity curve timestamps
 
-#### `DataWindow Handling::requestDataWindow(MarketData& md, int period, int timeframe = 0)`
-Pulls `period` bars from the market data source. Returns a `DataWindow` with parallel `prices` and `volumes` vectors; typical usage is `prices = std::move(window.prices)` (to update the vector bound to `Handling`) and feed `window.volumes` into `returnVolumeProfile`.
+#### `DataWindow Handling::requestDataWindow(MarketData& md, int period, void (*whenUnknown)(), bool supressWarnings = false, int timeframe = 0, int tickRes = 1)`
+Pulls `period` bars from the market data source. Returns a `DataWindow` with parallel `prices`, `volumes`, `execBids`, `execAsks`, and `deltas` vectors.
 
 - `md` — MarketData source
 - `period` — how many rows/bars to load
-- `timeframe` — 0 = tick-by-tick, >0 = close every N seconds. For tick mode `volumes[i]` is that tick's traded size; for bar mode it's the summed volume across all ticks in the bar.
+- `whenUnknown` — callback invoked when the aggressor side can't be classified
+- `supressWarnings` — set true to silence tickRes warnings
+- `timeframe` — 0 = tick-by-tick, >0 = close every N seconds
+- `tickRes` — tick mode only: keep every Nth tick (1 = full resolution)
+
+`execBids` and `execAsks` classify each tick's volume by aggressor side using the aliases configured in `csvConfig.h`. If the CSV side column doesn't match either alias, `whenUnknown` is called instead. `deltas[i]` is the price change from the previous bar.
 
 ---
 
