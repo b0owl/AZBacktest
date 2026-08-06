@@ -17,13 +17,7 @@
 #include "../src/window/window.h"
 
 int main() {
-    float tickSize  = 0.25f;
-    float tickValue = 0.50f;
-    MarketData md(kCSVMapping.path);
-
-    std::vector<float> prices;
-
-    Handling h(prices, tickSize, tickValue);
+    auto e = setupEngine(0.25f, 0.50f);
 
     float takeProfit = 100.f;
     float stopLoss   = 50.f;
@@ -45,21 +39,20 @@ int main() {
     int i = 0;
     long long prevEpoch = 0;
     while (true) {
-        auto window = h.requestDataWindow(md, batchSize, 30);
+        auto window = e.h.requestDataWindow(e.md, batchSize, 30);
         if (window.prices.empty()) break;
-        prices = std::move(window.prices);
+        e.prices = std::move(window.prices);
         auto& volumes = window.volumes;
 
-        for (int b = 0; b < (int)prices.size(); b++) {
+        for (int b = 0; b < (int)e.prices.size(); b++) {
             i++;
-            float px = prices[b];
-            long long epochSec = h.windowTimestamps[b];
+            float px = e.prices[b];
+            long long epochSec = e.h.windowTimestamps[b];
 
             // skip bars that span data gaps, not real 30s bars
             if (prevEpoch > 0 && (epochSec - prevEpoch) > 120) {
-                if (h.openTrade) {
-                    // close at the last valid price, not the post-gap price
-                    h.closeTrade();
+                if (e.h.openTrade) {
+                    e.h.closeTrade();
                 }
                 prevEpoch = epochSec;
                 continue;
@@ -69,14 +62,13 @@ int main() {
             int tod = (int)(epochSec % 86400);
 
             if (tod < rthOpen || tod >= rthClose) {
-                // close any open trade at RTH boundary so overnight gaps dont inflate PnL
-                if (h.openTrade) {
-                    float saved = prices.back();
-                    prices.back() = px;
-                    h.lastEpochSec = epochSec;
-                    h.tick();
-                    h.closeTrade();
-                    prices.back() = saved;
+                if (e.h.openTrade) {
+                    float saved = e.prices.back();
+                    e.prices.back() = px;
+                    e.h.lastEpochSec = epochSec;
+                    e.h.tick();
+                    e.h.closeTrade();
+                    e.prices.back() = saved;
                 }
                 continue;
             }
@@ -93,7 +85,7 @@ int main() {
             dailyPrices.push_back(px);
             dailyVolume.push_back(volumes[b]);
 
-            if (i % 5000 == 0) { std::cout << "  bar " << i << " trades=" << trades.size() << "\n"; }
+            if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << e.h.eof << std::endl; }
 
             if (tod - rthOpen < warmupSecs) continue;
 
@@ -109,41 +101,26 @@ int main() {
 
             if (val == 0.f && vah == 0.f) continue;
 
-            // temporarily set prices.back() so Handling reads the right price
-            float saved = prices.back();
-            prices.back() = px;
-            h.lastEpochSec = epochSec;
-            h.tick();
+            float saved = e.prices.back();
+            e.prices.back() = px;
+            e.h.lastEpochSec = epochSec;
+            e.h.tick();
 
-            if (h.openTrade) {
-                float pnl = h.openTrade->td.profit;
-                if (pnl >= takeProfit || pnl <= -stopLoss) h.closeTrade();
+            if (e.h.openTrade) {
+                float pnl = e.h.openTrade->td.profit;
+                if (pnl >= takeProfit || pnl <= -stopLoss) e.h.closeTrade();
             }
 
             float mid = (val + vah) / 2.f;
-            if (!h.inShort && px >= vah) { h.openShort(i); targetMid = mid; }
-            if (!h.inLong  && px <= val) { h.openLong(i);  targetMid = mid; }
+            if (!e.h.inShort && px >= vah) { e.h.openShort(i); targetMid = mid; }
+            if (!e.h.inLong  && px <= val) { e.h.openLong(i);  targetMid = mid; }
 
-            if (h.inShort && px <= targetMid) h.closeTrade();
-            if (h.inLong  && px >= targetMid) h.closeTrade();
+            if (e.h.inShort && px <= targetMid) e.h.closeTrade();
+            if (e.h.inLong  && px >= targetMid) e.h.closeTrade();
 
-            prices.back() = saved;
+            e.prices.back() = saved;
         }
-    } h.closeAll();
-
-    std::cout << "bars processed: " << i << "\n";
-    std::cout << "trades:         " << trades.size() << "\n";
-    std::cout << "winrate:        " << returnWinrate() * 100.0f << "%\n";
-    std::cout << "cum profit:     " << returnCumProfit() << " pts\n";
-
-    // stats
-    addStat("winrate %", returnWinrate() * 100.f);
-    addStat("expectancy", returnAvgPnl());
-    addStat("avg winner", returnAverageWinSize());
-    addStat("avg loser", returnAverageLossSize());
-    addStat("trades/day", returnTradesPerDay());
-    addStat("total trades", (float)trades.size());
-    addStat("cum profit", returnCumProfit());
+    } e.h.closeAll();
 
     // monte carlo (daily bucketed)
     int mcSims = 60;

@@ -1,6 +1,3 @@
-// TODO - Clean up other files
-
-
 #include <iostream>
 #include <vector>
 
@@ -9,13 +6,7 @@
 #include "../src/window/window.h"
 
 int main() {
-    float tickSize  = 0.25f;
-    float tickValue = 0.50f;
-    MarketData md(kCSVMapping.path);
-
-    std::vector<float> prices;
-
-    Handling h(prices, tickSize, tickValue);
+    auto e = setupEngine(0.25f, 0.50f);
 
     int shortPeriod = 100;
     int longPeriod  = 200;
@@ -23,57 +14,64 @@ int main() {
     float takeProfit = 500.f;
     float stopLoss   = 50.f;
 
+    std::cout << "Fetching EOF..." << std::endl;
+    e.h.fetchEOF(60);
+    std::cout << "EOF Found, continuing..." << std::endl;
+
+    int batchSize = 500;
     int i = 0;
-    while (auto tick = md.nextTick()) {
-        i++;
+    while (true) {
+        auto window = e.h.requestDataWindow(e.md, batchSize, 60);
+        if (window.prices.empty()) break;
+        e.prices = std::move(window.prices);
 
-        if (i % 500 == 0) { // loads 500 rows, 60s tf
-            auto window = h.requestDataWindow(md, 500, 60);
-            prices = std::move(window.prices);
-        }
-        if (i % 1000 == 0) { std::cout << "  bar " << i << " trades=" << trades.size() << "\n"; } // counter
+        if ((int)e.prices.size() < (longPeriod * 2)) continue;
 
-        // Check window size
-        if ((int)prices.size() < (longPeriod * 2)) continue; // long period * 2 = min window
-
-        float shortMaVal = returnSimpleMovingAverage(prices, shortPeriod).back();
-        float longMaVal  = returnSimpleMovingAverage(prices, longPeriod).back();
+        float shortMaVal = returnSimpleMovingAverage(e.prices, shortPeriod).back();
+        float longMaVal  = returnSimpleMovingAverage(e.prices, longPeriod).back();
 
         bool shortAboveLong = shortMaVal > longMaVal;
         bool shortBelowLong = shortMaVal < longMaVal;
 
-        // This can return state directtly; or you could access it via h.inLong/h.inShort if you don't care about
-        // ownership. (You could always assign ownership by setting a local inX var to h.inX but I digress)
+        for (int b = 0; b < (int)e.prices.size(); b++) {
+            i++;
+            if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << e.h.eof << std::endl; }
 
-        // Tick is needed for things like letting the handler know the state of a trade
-        // be sure to call it inside of your loop
-        h.tick(tick->timestamp);
+            float saved = e.prices.back();
+            e.prices.back() = e.prices[b];
+            e.h.tick();
 
-        // tp/sl handling
-        if (h.openTrade) {
-            float pnl = h.openTrade->td.profit;
-            if (pnl >= takeProfit || pnl <= -stopLoss) h.closeTrade();
+            // tp/sl handling
+            if (e.h.openTrade) {
+                float pnl = e.h.openTrade->td.profit;
+                if (pnl >= takeProfit || pnl <= -stopLoss) e.h.closeTrade();
+            }
+
+            // exits first so we can immediately flip into the opposite side on the same bar
+            if (e.h.inLong && shortBelowLong)  e.h.closeTrade();
+            if (e.h.inShort && shortAboveLong) e.h.closeTrade();
+
+            // entries
+            if (!e.h.inLong && shortAboveLong)  e.h.openLong(i);
+            if (!e.h.inShort && shortBelowLong) e.h.openShort(i);
+
+            e.prices.back() = saved;
         }
+    } e.h.closeAll();
 
-        // Exits first so we can immediately flip into the opposite side on the same bar
-        if (h.inLong && shortBelowLong)  h.closeTrade();
-        if (h.inShort && shortAboveLong) h.closeTrade();
+    // monte carlo (daily bucketed)
+    int mcSims = 60;
+    auto mcPaths = returnMonteCarlo(mcSims, 5, 86400);
+    auto pctPaths = returnPercentilePaths(mcPaths, {5, 50, 95});
+    auto profit = returnCumProfitBucketed(86400);
 
-        // Entries
-        if (!h.inLong && shortAboveLong)  h.openLong(i);
-        if (!h.inShort && shortBelowLong) h.openShort(i);
-    } h.closeAll();
+    std::vector<std::vector<float>> mainPaths;
+    mainPaths.push_back(profit);
+    for (auto& p : pctPaths) mainPaths.push_back(std::move(p));
 
-    std::cout << "bars processed: " << i << "\n";
-    std::cout << "trades:         " << trades.size() << "\n";
-    std::cout << "winrate:        " << returnWinrate() * 100.0f << "%\n";
-    std::cout << "cum profit:     " << returnCumProfit() << " pts\n";
+    addSeries("mc cloud", mcPaths, {}, 0, RGBA{0.4f, 0.4f, 0.4f, 0.3f});
+    addSeries("equity + percentiles", mainPaths,
+        {"actual", "p5", "p50", "p95"}, 0, RGBA{0.5f, 0.8f, 0.5f, 1.0f});
 
-    auto profit = returnProfitOverTime();
-    initSeriesPool(
-        {profit, profit, returnAverageProfitOverTime()},
-        {"profit over time (line)", "profit over time (bar)", "average profit over time"},
-        {0, 1, 0}
-    );
     showConsole("Console");
 }

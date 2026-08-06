@@ -6,43 +6,45 @@
 #include "../src/window/window.h"
 
 int main() {
-    float tickSize  = 0.25f;
-    float tickValue = 0.50f;
-    MarketData md(kCSVMapping.path);
+    // removes some boilerplate code, not necessarily needed but cleaner to use
+    auto e = setupEngine(0.25, 0.50); // tickSize & tickValue
 
-    std::vector<float> prices;
-
-    Handling h(prices, tickSize, tickValue);
-
+    std::cout << "Fetching EOF..." << std::endl;
+    e.h.fetchEOF(60); // sets h.eof to eof, 60 = 60 second tf (sets bar count properly)
+    std::cout << "EOF Found, continuing..." << std::endl;
+    int batchSize = 500;
     int i = 0;
-    while (auto tick = md.nextTick()) {
-        i++;
+    while (true) {
+        auto window = e.h.requestDataWindow(e.md, batchSize, 60);
+        if (window.prices.empty()) break;
+        e.prices = std::move(window.prices);
 
-        if (i % 500 == 0) {
-            auto window = h.requestDataWindow(md, 500, 60); // loads 500 rows, 60s tf
-            prices = std::move(window.prices);
+        for (int b = 0; b < (int)e.prices.size(); b++) {
+            i++;
+            if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << e.h.eof << std::endl; }
+
+            e.h.openLong(i);
+
+            float saved = e.prices.back();
+            e.prices.back() = e.prices[b];
+            e.h.tick();
+            e.prices.back() = saved;
         }
+    } e.h.closeAll();
 
-        if (i % 1000 == 0) { std::cout << "  bar " << i << " trades=" << trades.size() << "\n"; } // counter
+    // monte carlo (daily bucketed)
+    int mcSims = 60;
+    auto mcPaths = returnMonteCarlo(mcSims, 5, 86400);
+    auto pctPaths = returnPercentilePaths(mcPaths, {5, 50, 95});
+    auto profit = returnCumProfitBucketed(86400);
 
-        if ((int)prices.size() < 1) continue; 
+    std::vector<std::vector<float>> mainPaths;
+    mainPaths.push_back(profit);
+    for (auto& p : pctPaths) mainPaths.push_back(std::move(p));
 
-        h.openLong(i);
+    addSeries("mc cloud", mcPaths, {}, 0, RGBA{0.4f, 0.4f, 0.4f, 0.3f});
+    addSeries("equity + percentiles", mainPaths,
+        {"actual", "p5", "p50", "p95"}, 0, RGBA{0.5f, 0.8f, 0.5f, 1.0f});
 
-        // Advance the open trade so its P&L reflects the current bar before exit checks
-        h.tick(tick->timestamp);
-    } h.closeAll(); // closes the trade
-
-    std::cout << "bars processed: " << i << "\n";
-    std::cout << "trades:         " << trades.size() << "\n";
-    std::cout << "winrate:        " << returnWinrate() * 100.0f << "%\n";
-    std::cout << "cum profit:     " << returnCumProfit() << " pts\n";
-
-    auto profit = returnProfitOverTime(60 * 24); // one bucket per day
-    initSeriesPool(
-        {profit, profit, returnAverageProfitOverTime()},
-        {"profit over time (line)", "profit over time (bar)", "average profit over time"},
-        {0, 1, 0}
-    );
     showConsole("Console");
 }
