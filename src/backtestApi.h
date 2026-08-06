@@ -206,10 +206,10 @@ public:
     /// @param timeframe 0 = tick-by-tick, >0 = close every N seconds
     /// @param tickRes  timeframe==0 only: 1 = full resolution, how many raw ticks
     /// get read (and discarded) between each kept tick, to downsample tick-by-tick data
-    DataWindow requestDataWindow(MarketData& md, int period, void (*whenUnknown)(),
-                                bool supressWarnings=false, int timeframe=0, int tickRes=1) {
+    DataWindow requestDataWindow(MarketData& md, int period, int timeframe=0, void (*whenUnknown)()=[](){},
+                                bool supressWarnings=false, int tickRes=1) {
 
-        if (!supressWarnings) {
+        if (!supressWarnings && tickRes != 1) {
             std::cout << "Warning! If tickRes is above one, classifying volume by bids/asks will not work properly" << std::endl;
             std::cout << "Supress these warnings by caling with the third argument being false" << std::endl;
         }
@@ -279,6 +279,7 @@ public:
         }
         return out;
     }
+
 };
 
 // ---- COMPILED DATA START ---- //
