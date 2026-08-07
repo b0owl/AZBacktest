@@ -55,8 +55,8 @@ void newBarSeries(std::string panelId) {
 
 /// @brief open the main console window and run the render loop until close
 /// @param title window title (currently unused, window gets titled at creation)
-void showConsole(const char* title) {
-    static GLFWwindow* window = windowManagement::createWindow();
+void showConsole(const char* title, void (skin)()) {
+    static GLFWwindow* window = windowManagement::createWindow(skin);
     // must run before the first ImGui::NewFrame() below, since that's when
     // ImGui loads the .ini and fires these handlers to restore panels/widgets
     panelManagement::registerSettingsHandler();
