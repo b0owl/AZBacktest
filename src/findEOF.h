@@ -11,32 +11,34 @@ inline int findEof(const char* path, int timeframe=1, int strideIncrement=2) {
         return true;
     };
 
-    auto lineExists = [&](int row) {
-        MarketData md(path);
-        return skipLines(md, row + 1);
-    };
-
     MarketData md(path);
     if (!md.skipLine()) return -1;
 
     int lastValid = 0;
     int stride = 1;
+    std::size_t lastValidOff = md.byteOffset();
 
-    // phase 1: exponential probing
+    // phase 1: exponential probing (single sequential pass)
     while (skipLines(md, stride)) {
         lastValid += stride;
+        lastValidOff = md.byteOffset();
         stride *= strideIncrement;
     }
 
     int firstInvalid = lastValid + stride;
 
-    // phase 2: binary search the bracket
+    // phase 2: binary search, seek from lastValid's byte offset each probe
     while (firstInvalid - lastValid > 1) {
         int midpoint = lastValid + (firstInvalid - lastValid) / 2;
-        if (lineExists(midpoint))
+        int delta = midpoint - lastValid;
+
+        md.seekTo(lastValidOff);
+        if (skipLines(md, delta)) {
             lastValid = midpoint;
-        else
+            lastValidOff = md.byteOffset();
+        } else {
             firstInvalid = midpoint;
+        }
     }
 
     if (timeframe <= 1) return lastValid;
@@ -47,9 +49,8 @@ inline int findEof(const char* path, int timeframe=1, int strideIncrement=2) {
     if (!firstTick) return 0;
     long long startSec = mdDetail::tsToEpochSeconds(firstTick->timestamp);
 
-    MarketData last(path);
-    skipLines(last, lastValid);
-    auto lastTick = last.nextTick();
+    md.seekTo(lastValidOff);
+    auto lastTick = md.nextTick();
     if (!lastTick) return 0;
     long long endSec = mdDetail::tsToEpochSeconds(lastTick->timestamp);
 
