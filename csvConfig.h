@@ -28,7 +28,10 @@ struct CSVMapping {
     int priceCol;
     int sizeCol;
 
-    // Path to the CSV, relative to the CWD from which the binary runs.
+    // Absolute path to the CSV. Deliberately not CWD-relative: this header
+    // gets amalgamated and copied into downstream projects that run from
+    // their own directory (not AZBacktest's), so a relative path here would
+    // resolve differently - and break - depending on who last regenerated it.
     const char* path;
 
     DateFormat dateFormat;
@@ -39,16 +42,30 @@ struct CSVMapping {
     int symbolCol;          // column index of the symbol field, -1 to disable
     const char* symbol;     // exact symbol, or root prefix if symbolRoll is true
     bool symbolRoll;        // treat symbol as a prefix and auto-roll when the front contract expires
+
+    // Aggressor/side column, read by MarketData::nextTick() to classify each
+    // tick's side (Handling::requestDataWindow's execBids/execAsks, and
+    // Tick::side). Defaulted off (-1) so existing configs that don't set
+    // these still compile and behave exactly as before - only nextTick()
+    // (timeframe==0) touches them; nextClose() ignores side entirely.
+    int aggressor = -1;                            // column index of the side field, -1 to disable
+    const char* buySideAggressorAlias = "B";        // CSV value meaning "buy aggressor / lifted the ask"
+    const char* sellSideAggressorAlias = "S";        // CSV value meaning "sell aggressor / hit the bid"
+    const char* unknownSideAggressorAlias = "N";     // fallback when the side column doesn't match either alias
 };
 
 inline constexpr CSVMapping kCSVMapping{
-    0,                                                    // timestampCol
-    8,                                                    // priceCol
-    9,                                                    // size, aka volume at that tick
-    "Placeholder Path",          // path
-    { 0, 4, 5, 2, 8, 2 },                                 // dateFormat: Y off/len, M off/len, D off/len
-    true,                                                 // skipHeader
-    19,                                                    // symbolCol
-    "MNQ",                                                 // symbol (root prefix for rolling)
-    true,                                                  // symbolRoll
+    PLACEHOLDER_VALUE,              // timestampCol (int)
+    PLACEHOLDER_VALUE,              // priceCol (int)
+    PLACEHOLDER_VALUE,              // sizeCol (int)
+    PLACEHOLDER_VALUE,              // path (const char*)
+    { PLACEHOLDER_VALUE },          // dateFormat (DateFormat: yearOff, yearLen, monthOff, monthLen, dayOff, dayLen)
+    PLACEHOLDER_VALUE,              // skipHeader (bool)
+    PLACEHOLDER_VALUE,              // symbolCol (int, -1 to disable)
+    PLACEHOLDER_VALUE,              // symbol (const char*)
+    PLACEHOLDER_VALUE,              // symbolRoll (bool)
+    PLACEHOLDER_VALUE,              // aggressor (int)
+    PLACEHOLDER_VALUE,              // buySideAggressorAlias (const char*)
+    PLACEHOLDER_VALUE,              // sellSideAggressorAlias (const char*)
+    PLACEHOLDER_VALUE,              // unknownSideAggressorAlias (const char*)
 };
