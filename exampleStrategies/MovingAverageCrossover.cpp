@@ -4,6 +4,8 @@
 #include "../src/backtestApi.h"
 #include "../src/initSeries.h"
 #include "../src/window/window.h"
+#include "../src/skins/light.h"
+#include "../src/skins/dark.h"
 
 int main() {
     // prices has to outlive handler, which holds a reference to it
@@ -76,5 +78,10 @@ int main() {
     addSeries("equity + percentiles", mainPaths,
         {"actual", "p5", "p50", "p95"}, 0, RGBA{0.5f, 0.8f, 0.5f, 1.0f});
 
-    showConsole("Console");
+    std::cout << "Thanks for trying out my project :)\n"
+              << "You can change the theme by calling showConsole with the appropriate function type "
+                 "(see the bottom of any example file); all normal ImGUI attributes are customizeable.\n";
+
+    showConsole("Console", skins::light);
+    // showConsole("Console", skins::dark);
 }
