@@ -215,6 +215,7 @@ inline void fourFields(const char* start, const char* end, int c1, int c2, int c
 /// @brief streaming reader over a raw byte range, used internally by MarketData
 class _MarketData {
 private:
+    const char* _base;
     const char* _cur;
     const char* _end;
     bool _consumedHeader = false;
@@ -285,7 +286,7 @@ private:
 
 public:
     _MarketData(const char* data, std::size_t size)
-        : _cur(data), _end(data + size) {}
+        : _base(data), _cur(data), _end(data + size) {}
 
     // skip past one line without parsing, returns false at EOF
     bool skipLine() {
@@ -295,6 +296,9 @@ public:
         _cur = (eol < _end) ? eol + 1 : _end;
         return true;
     }
+
+    std::size_t byteOffset() const { return static_cast<std::size_t>(_cur - _base); }
+    void seekTo(std::size_t off) { _cur = _base + off; _consumedHeader = true; }
 
     /// @brief next tick from the file (header skipped on first call)
     /// @return the next tick as views into the underlying buffer, or nullopt at EOF
@@ -450,6 +454,8 @@ public:
     MarketData& operator=(const MarketData&) = delete;
 
     bool skipLine()                             { return _inner.skipLine(); }
+    std::size_t byteOffset() const              { return _inner.byteOffset(); }
+    void seekTo(std::size_t off)                { _inner.seekTo(off); }
 
     /// @brief next raw tick from the CSV, returns nullopt at EOF
     std::optional<Tick> nextTick()             { return _inner.nextTick(); }
