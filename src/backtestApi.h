@@ -415,6 +415,27 @@ std::vector<float> returnValueArea(std::vector<std::vector<float>> volumeProfile
     return {volumeProfile[lo][0], volumeProfile[hi][0]};
 }
 
+/// @brief anchored volume-weighted average price, running/cumulative from
+/// `anchor` forward so vwap[i] reflects every bar from anchor through i,
+/// one output value per bar in that range (parallel to prices[anchor..])
+/// @param anchor starting index inside `prices` (everything before is ignored)
+/// @param prices price vec to scan
+/// @param volumeData per-bar volume, same length as prices
+/// @return running VWAP, one value per bar from anchor to the end of prices
+std::vector<float> returnVWAP(int anchor, const std::vector<float>& prices, const std::vector<float>& volumeData) {
+    std::vector<float> vwap;
+    if (anchor < 0 || anchor >= (int)prices.size()) return vwap;
+    vwap.reserve(prices.size() - anchor);
+
+    double sumPV = 0.0, sumV = 0.0;
+    for (int i = anchor; i < (int)prices.size(); i++) {
+        sumPV += (double)prices[i] * volumeData[i];
+        sumV += volumeData[i];
+        vwap.push_back(sumV > 0.0 ? static_cast<float>(sumPV / sumV) : prices[i]);
+    }
+    return vwap;
+}
+
 // ---- STATISTICS START ---- //
 
 
