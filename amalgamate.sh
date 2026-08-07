@@ -69,6 +69,7 @@ FILES=(
     # src
     "$SCRIPT_DIR/csvConfig.h"
     "$SCRIPT_DIR/src/marketData.h"
+    "$SCRIPT_DIR/src/findEOF.h"
     "$SCRIPT_DIR/src/backtestApi.h"
     "$SCRIPT_DIR/src/window/tooling/seriesPool.h"
     "$SCRIPT_DIR/src/window/tooling/statPool.h"
@@ -76,6 +77,8 @@ FILES=(
     "$SCRIPT_DIR/src/window/tooling/panelManagement.h"
     "$SCRIPT_DIR/src/window/tooling/widgetManagement.h"
     "$SCRIPT_DIR/src/window/tooling/windowManagement.h"
+    "$SCRIPT_DIR/src/skins/light.h"
+    "$SCRIPT_DIR/src/skins/dark.h"
     "$SCRIPT_DIR/src/window/window.h"
     "$SCRIPT_DIR/src/window/window.cpp"
 )
