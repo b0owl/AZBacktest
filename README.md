@@ -17,11 +17,11 @@ Commit convention/notes:
 -> If you are looking for an earlier version of  the project (created before the aforementioned date) scan the commit messages for the most stable version.  
 
 TODOS:  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Overlapping trade support  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Read-From-CSV option for UI (less restarting the visualizer)  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;More built-in price derived data  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Codebase refactoring   
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Skin support (allow easy exposure to the internal imgui theme)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[ ] Overlapping trade support  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[ ] Read-From-CSV option for UI (less restarting the visualizer)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[ ] More built-in price derived data  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[ ] Codebase refactoring  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[x] Skin support (allow easy exposure to the internal imgui theme)  
 
 C++17 backtesting framework. Header-only API with an ImGui/ImPlot visualization window.
 
