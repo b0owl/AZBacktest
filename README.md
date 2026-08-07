@@ -152,6 +152,13 @@ Returns `{VAL, VAH}`, the price range containing `pct` of total volume.
 - `volumeProfile` — output of `returnVolumeProfile`
 - `pct` — fraction of volume to capture (default 0.70)
 
+#### `std::vector<float> returnVWAP(int anchor, const std::vector<float>& prices, const std::vector<float>& volumeData)`
+Anchored volume-weighted average price, running/cumulative from `anchor` forward. One output value per bar (parallel to `prices[anchor..]`), so `.back()` is the current VWAP.
+
+- `anchor` — starting index (everything before is ignored); reset it to the first bar of a session for a daily VWAP
+- `prices` — price vector
+- `volumeData` — per-bar volume, same length as prices
+
 ---
 
 ### Statistics
