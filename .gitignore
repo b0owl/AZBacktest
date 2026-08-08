@@ -4,3 +4,4 @@ imgui.ini
 /azbacktest.h
 *.csv
 *.DS_Store
+Data/glbx-mdp3-20250601-20260514.tbbo.parquet
