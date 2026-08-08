@@ -38,12 +38,35 @@ bash build.sh
 bash build.sh -clean
 ```
 
-Requires g++ with C++17, GLFW and OpenGL (vendored under `vendor/`).
+Requires g++ with C++17 (C++20 if Parquet support is linked in, see below), GLFW and OpenGL (vendored under `vendor/`).
 
 ## Configuration
 
-Edit `csvConfig.h` to point at your CSV and map column indices.
+Edit `csvConfig.h` to point at your CSV (or Parquet, see below) and map column indices.
 Note: If you use the header file (from releases) you'd have to search for the mapping itself, and change it directly.
+
+### Parquet support
+
+`MarketData` also reads Parquet files directly - point `kCSVMapping.path` at a `.parquet`
+file instead of a `.csv` one, keeping the same column indices (`timestampCol`, `priceCol`,
+etc). The Parquet file needs the same column order/names as your CSV, with each column
+given a proper type (timestamps, doubles, ints) instead of raw text - usually several times
+smaller and faster to read than the equivalent CSV. `pyarrow` (`pip install pyarrow`) can
+produce one straight from a CSV, letting it infer types per column and preserving order.
+
+This needs [Apache Arrow](https://arrow.apache.org/):
+
+- **macOS**: `brew install apache-arrow`
+- **Windows** (MinGW/MSYS): install via [vcpkg](https://vcpkg.io) with a MinGW triplet
+  (vcpkg's default MSVC-built libs aren't ABI-compatible with g++):
+  `vcpkg install arrow[parquet]:x64-mingw-dynamic`. `build.sh` looks for it via `VCPKG_ROOT`,
+  or at `C:\vcpkg` / `C:\tools\vcpkg` if that's unset.
+
+`build.sh` auto-detects Arrow and links it in when present; without it, builds still work
+but are CSV-only (pointing `kCSVMapping.path` at a `.parquet` file without Arrow compiled in
+throws a clear error at startup telling you to install it). Since Arrow's headers require
+C++20, `build.sh` bumps the standard to C++20 automatically whenever it links Arrow in -
+only for builds that use it, CSV-only builds stay on C++17.
 
 ```cpp
 inline constexpr CSVMapping kCSVMapping{
