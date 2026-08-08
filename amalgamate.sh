@@ -98,6 +98,7 @@ STB_RECTPACK="$SCRIPT_DIR/vendor/imgui/imstb_rectpack.h"
 STB_TRUETYPE="$SCRIPT_DIR/vendor/imgui/imstb_truetype.h"
 STB_TEXTEDIT="$SCRIPT_DIR/vendor/imgui/imstb_textedit.h"
 GL3W_LOADER="$SCRIPT_DIR/vendor/imgui/backends/imgui_impl_opengl3_loader.h"
+PARQUET_MD="$SCRIPT_DIR/src/parquetMarketData.h"
 
 for f in "${FILES[@]}"; do
     rel="${f#$SCRIPT_DIR/}"
@@ -120,6 +121,14 @@ for f in "${FILES[@]}"; do
             # same story: the gl3w-based loader is #include'd right after
             # #define IMGL3W_IMPL, providing imgl3wInit()/modern GL decls
             inline_stb "$f" '#include "imgui_impl_opengl3_loader.h"' "$GL3W_LOADER" \
+                | sed -E '/^#pragma once/d; /^[[:space:]]*#include[[:space:]]*"/d' >> "$OUT"
+            ;;
+        src/marketData.h)
+            # _ParquetMarketData must land between Tick/mdDetail and the
+            # MarketData wrapper that references it - same mid-file inlining
+            # need as the STB libs above, just for our own header instead of
+            # a vendored one
+            inline_stb "$f" '#include "parquetMarketData.h"' "$PARQUET_MD" \
                 | sed -E '/^#pragma once/d; /^[[:space:]]*#include[[:space:]]*"/d' >> "$OUT"
             ;;
         *)

@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstddef>
 #include <cstring>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -109,6 +110,27 @@ inline std::string endTimestamp(std::string_view startTs, int seconds) {
     int n = std::snprintf(buf, sizeof(buf),
         "%04d-%02u-%02uT%02d:%02d:%02d", c.y, c.m, c.d, h, mi, s);
     return std::string(buf, static_cast<size_t>(n));
+}
+
+/// @brief inverse of tsToEpochSeconds' string slicing: format epoch nanoseconds
+/// back into Databento's ISO-8601 layout (e.g. "2025-06-01T22:00:00.065308005Z"),
+/// byte-for-byte compatible with the CSV's raw format. Used by the Parquet
+/// backend so Tick::timestamp stays a string_view either way, letting every
+/// existing consumer (tsToEpochSeconds, endTimestamp) work unmodified.
+/// @param buf caller-owned buffer, must be at least 32 bytes
+/// @return number of bytes written (excluding the null terminator)
+inline int formatIsoTimestamp(char* buf, std::size_t bufSize, long long nanosSinceEpoch) {
+    long long days = nanosSinceEpoch / 86400000000000LL;
+    long long rem  = nanosSinceEpoch % 86400000000000LL;
+    if (rem < 0) { rem += 86400000000000LL; --days; }
+    long long secOfDay = rem / 1000000000LL;
+    long long fracNs    = rem % 1000000000LL;
+    int h  = static_cast<int>(secOfDay / 3600);
+    int mi = static_cast<int>((secOfDay / 60) % 60);
+    int s  = static_cast<int>(secOfDay % 60);
+    CivilDate c = daysToCivil(days);
+    return std::snprintf(buf, bufSize, "%04d-%02u-%02uT%02d:%02d:%02d.%09lldZ",
+        c.y, c.m, c.d, h, mi, s, fracNs);
 }
 
 /// @brief find first '\n' in [p, end), returns end if none found
@@ -211,6 +233,12 @@ inline void fourFields(const char* start, const char* end, int c1, int c2, int c
 }
 
 } // namespace mdDetail
+
+// Parquet-backed reader (_ParquetMarketData), compiled in only when build.sh
+// detects Arrow/Parquet on the system (defines AZBT_PARQUET). Needs Tick and
+// mdDetail::* from above, so it's included here rather than from the top of
+// this file. A no-op include when AZBT_PARQUET isn't defined.
+#include "parquetMarketData.h"
 
 /// @brief streaming reader over a raw byte range, used internally by MarketData
 class _MarketData {
@@ -368,8 +396,18 @@ public:
     }
 };
 
-/// @brief memory-maps a CSV and exposes tick-by-tick or bar-by-bar reads
-/// tick fields are views into the mapping, valid as long as this object is alive
+/// @brief true if `path` ends in ".parquet" (case-sensitive), used by MarketData
+/// to decide which backend to construct
+inline bool isParquetPath(const std::string& path) {
+    static constexpr std::string_view kExt = ".parquet";
+    return path.size() >= kExt.size()
+        && path.compare(path.size() - kExt.size(), kExt.size(), kExt) == 0;
+}
+
+/// @brief reads market data from either a memory-mapped CSV or (when built
+/// with Arrow/Parquet support, see build.sh) a Parquet file, picked by the
+/// extension of `path`. Tick fields are views into per-instance buffers,
+/// valid until the next call on this MarketData instance.
 class MarketData {
 private:
     struct RawMap {
@@ -383,7 +421,10 @@ private:
 #endif
     };
     RawMap _map;
-    _MarketData _inner;
+    std::unique_ptr<_MarketData> _csv;
+#ifdef AZBT_PARQUET
+    std::unique_ptr<_ParquetMarketData> _pq;
+#endif
 
     static RawMap openMap(const std::string& path) {
         RawMap m;
@@ -434,11 +475,27 @@ private:
     }
 
 public:
-    /// @brief mmap the CSV at `path` and bind the internal reader to it
-    MarketData(const std::string& path)
-        : _map(openMap(path)), _inner(_map.data, _map.size) {}
+    /// @brief opens `path`, mmapping it if it's a CSV or (given Arrow/Parquet
+    /// support, see build.sh) opening it as Parquet if the extension is
+    /// ".parquet"
+    MarketData(const std::string& path) {
+        if (isParquetPath(path)) {
+#ifdef AZBT_PARQUET
+            _pq = std::make_unique<_ParquetMarketData>(path);
+#else
+            throw std::runtime_error(
+                "MarketData: " + path + " is a .parquet file, but this build has no "
+                "Parquet support (Arrow wasn't found when it was built). Install it with "
+                "`brew install apache-arrow` and rebuild.");
+#endif
+        } else {
+            _map = openMap(path);
+            _csv = std::make_unique<_MarketData>(_map.data, _map.size);
+        }
+    }
 
     ~MarketData() {
+        if (!_csv) return;
 #ifdef _WIN32
         if (_map.data)                        UnmapViewOfFile(_map.data);
         if (_map.hMap)                        CloseHandle(_map.hMap);
@@ -453,16 +510,43 @@ public:
     MarketData(const MarketData&)            = delete;
     MarketData& operator=(const MarketData&) = delete;
 
-    bool skipLine()                             { return _inner.skipLine(); }
-    std::size_t byteOffset() const              { return _inner.byteOffset(); }
-    void seekTo(std::size_t off)                { _inner.seekTo(off); }
+    bool skipLine() {
+#ifdef AZBT_PARQUET
+        if (_pq) return _pq->skipLine();
+#endif
+        return _csv->skipLine();
+    }
 
-    /// @brief next raw tick from the CSV, returns nullopt at EOF
-    std::optional<Tick> nextTick()             { return _inner.nextTick(); }
+    std::size_t byteOffset() const {
+#ifdef AZBT_PARQUET
+        if (_pq) return _pq->byteOffset();
+#endif
+        return _csv->byteOffset();
+    }
+
+    void seekTo(std::size_t off) {
+#ifdef AZBT_PARQUET
+        if (_pq) { _pq->seekTo(off); return; }
+#endif
+        _csv->seekTo(off);
+    }
+
+    /// @brief next raw tick, returns nullopt at EOF
+    std::optional<Tick> nextTick() {
+#ifdef AZBT_PARQUET
+        if (_pq) return _pq->nextTick();
+#endif
+        return _csv->nextTick();
+    }
 
     /// @brief close tick of the next bar spanning at least `seconds`,
     /// skips forward until the timestamp is >= start + seconds, then
     /// returns that row's price as the "close"
     /// @param seconds bar width in seconds (e.g. 60 for 1-min bars)
-    std::optional<Tick> nextClose(int seconds) { return _inner.nextClose(seconds); }
+    std::optional<Tick> nextClose(int seconds) {
+#ifdef AZBT_PARQUET
+        if (_pq) return _pq->nextClose(seconds);
+#endif
+        return _csv->nextClose(seconds);
+    }
 };
