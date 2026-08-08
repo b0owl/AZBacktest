@@ -3,4 +3,5 @@
 imgui.ini
 /azbacktest.h
 *.csv
+*.parquet
 *.DS_Store
