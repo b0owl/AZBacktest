@@ -1,9 +1,4 @@
-/// Mapping / path config
-// Default settings are for *MY* codebase !!!
-// The actual CSV index maps are for Databentos TBBO Schema.
-// The fastest way to config your mapping here would be to ask claude,
-// but it won't take long to do manually.
-// be weary of misconfiguration, though.
+// set mapping here if building the header manually
 
 // You can set values to none if they dont exist in the CSV, just don't call anything that needs them. 
 
