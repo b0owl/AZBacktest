@@ -109,6 +109,7 @@ collect_deps "$ABS_FILE"
 EXTRA_INCLUDES=()
 EXTRA_SOURCES=()
 EXTRA_LIBS=()
+EXTRA_DEFINES=()
 uses_imgui=0
 for f in "${SCANNED[@]}"; do
     if grep -qE '^\s*#\s*include\s*[<"]imgui\.h[>"]' "$f"; then
@@ -159,8 +160,84 @@ if [[ $uses_implot -eq 1 ]]; then
     )
 fi
 
+# marketData.h always carries the Parquet backend behind #ifdef AZBT_PARQUET
+# (both in the src/ tree and inlined into the amalgamated azbacktest.h), so
+# detect it by grepping for that macro rather than a specific #include - it
+# needs to fire whether the strategy includes marketData.h/backtestApi.h
+# directly or just the single-header release build.
+uses_parquet=0
+for f in "${SCANNED[@]}"; do
+    if grep -q 'AZBT_PARQUET' "$f" 2>/dev/null; then
+        uses_parquet=1; break
+    fi
+done
+CXX_STD="c++17"
+if [[ $uses_parquet -eq 1 ]]; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if [[ -f "/opt/homebrew/lib/libarrow.dylib" ]] && [[ -f "/opt/homebrew/lib/libparquet.dylib" ]]; then
+            ARROW_PREFIX="/opt/homebrew"
+        elif [[ -f "/usr/local/lib/libarrow.dylib" ]] && [[ -f "/usr/local/lib/libparquet.dylib" ]]; then
+            ARROW_PREFIX="/usr/local"
+        fi
+        if [[ -n "${ARROW_PREFIX:-}" ]]; then
+            EXTRA_INCLUDES+=(-I"$ARROW_PREFIX/include")
+            EXTRA_LIBS+=(-L"$ARROW_PREFIX/lib" -larrow -lparquet)
+            EXTRA_DEFINES+=(-DAZBT_PARQUET)
+            # Arrow's headers use C++20 library features (std::span,
+            # std::popcount); bump the standard only when it's actually
+            # linked in so CSV-only builds without Arrow are unaffected.
+            CXX_STD="c++20"
+        else
+            echo "Note: building without Parquet support (Arrow not found). .parquet data files won't work until you: brew install apache-arrow" >&2
+        fi
+    else
+        # Windows (assumes MinGW/MSYS, matching the GLFW branch above). Arrow
+        # is too heavy to vendor like GLFW (its own dependency graph pulls in
+        # llvm/grpc/aws-sdk-cpp/etc), so look for a vcpkg install instead -
+        # specifically a MinGW triplet, since vcpkg's default MSVC-built libs
+        # aren't ABI-compatible with g++:
+        #   vcpkg install arrow[parquet]:x64-mingw-dynamic
+        #
+        # UNTESTED on Windows - this is a best-effort guess at vcpkg's layout
+        # and triplet naming. If it doesn't find your install, check the
+        # candidate paths/triplets below against your actual
+        # <vcpkg root>/installed/<triplet> directory.
+        VCPKG_ARROW_ROOT=""
+        VCPKG_CANDIDATES=("$PROJECT_ROOT/vcpkg" "/c/vcpkg" "/c/tools/vcpkg")
+        if [[ -n "${VCPKG_ROOT:-}" ]]; then
+            NORMALIZED_VCPKG_ROOT="$VCPKG_ROOT"
+            if command -v cygpath >/dev/null 2>&1; then
+                NORMALIZED_VCPKG_ROOT="$(cygpath -u "$VCPKG_ROOT" 2>/dev/null || echo "$VCPKG_ROOT")"
+            fi
+            VCPKG_CANDIDATES=("$NORMALIZED_VCPKG_ROOT" "${VCPKG_CANDIDATES[@]}")
+        fi
+        for VCPKG_CANDIDATE in "${VCPKG_CANDIDATES[@]}"; do
+            # dynamic first: linking just -larrow -lparquet against a static
+            # triplet also needs every transitive dep (thrift/snappy/zstd/...)
+            # spelled out explicitly, which the dynamic triplet avoids
+            for TRIPLET in x64-mingw-dynamic x64-mingw-static; do
+                if [[ -f "$VCPKG_CANDIDATE/installed/$TRIPLET/include/arrow/api.h" ]]; then
+                    VCPKG_ARROW_ROOT="$VCPKG_CANDIDATE/installed/$TRIPLET"
+                    break 2
+                fi
+            done
+        done
+
+        if [[ -n "$VCPKG_ARROW_ROOT" ]]; then
+            EXTRA_INCLUDES+=(-I"$VCPKG_ARROW_ROOT/include")
+            EXTRA_LIBS+=(-L"$VCPKG_ARROW_ROOT/lib" -larrow -lparquet)
+            EXTRA_DEFINES+=(-DAZBT_PARQUET)
+            CXX_STD="c++20"
+        else
+            echo "Note: building without Parquet support (no vcpkg Arrow install found)." >&2
+            echo "  Install with: vcpkg install arrow[parquet]:x64-mingw-dynamic" >&2
+            echo "  Then either set VCPKG_ROOT, or install vcpkg at C:\\vcpkg." >&2
+        fi
+    fi
+fi
+
 OUT_EXE="$FILE_DIR/.build_$$.exe"
-g++ -std=c++17 -I"$PROJECT_ROOT" "${EXTRA_INCLUDES[@]}" "$ABS_FILE" "${DEPS[@]}" "${EXTRA_SOURCES[@]}" -o "$OUT_EXE" "${EXTRA_LIBS[@]}"
+g++ -std="$CXX_STD" -I"$PROJECT_ROOT" "${EXTRA_DEFINES[@]}" "${EXTRA_INCLUDES[@]}" "$ABS_FILE" "${DEPS[@]}" "${EXTRA_SOURCES[@]}" -o "$OUT_EXE" "${EXTRA_LIBS[@]}"
 
 cd "$PROJECT_ROOT"
 "$OUT_EXE"
