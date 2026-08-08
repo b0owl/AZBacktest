@@ -311,12 +311,12 @@ Engine setupEngine(float tickSize, float tickValue) {
 // ---- COMPILED DATA START ---- //
 
 
-/// @brief simple moving average over the tail end of `prices`, uses the last
+/// @brief simple moving average over the tail end of `data`, uses the last
 /// period*2 values so you get `period` output points (one per bar after warmup)
-/// @param prices full price vec, only the tail gets touched
+/// @param data full data vec, has to have length of at least `period`, only the tail gets touched
 /// @param period lookback length
-std::vector<float> returnSimpleMovingAverage(const std::vector<float>& prices, int period) {
-    std::vector<float> requiredChunk(prices.end() - (period*2), prices.end());
+std::vector<float> returnSimpleMovingAverage(const std::vector<float>& data, int period) {
+    std::vector<float> requiredChunk(data.end() - (period*2), data.end());
     std::vector<float> avgOverTime;
 
     float sum = 0;
@@ -327,9 +327,12 @@ std::vector<float> returnSimpleMovingAverage(const std::vector<float>& prices, i
             avgOverTime.push_back(sum / static_cast<float>(period));
         }
     }
-
     return avgOverTime;
 }
+
+// Convention note: SMA Formula is worded around `data` whilst the EMA formula is worded
+//                  around `price`, this is intentional and because SMAs are useful for data
+//                  unrelated to actual price. 
 
 /// @brief exponential moving average, same tail-slice convention as the SMA
 /// seeds with a simple average of the first `period` values, then applies the
