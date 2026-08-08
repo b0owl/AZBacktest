@@ -67,8 +67,9 @@ private:
     std::shared_ptr<arrow::TimestampArray> _tsArr;
     std::shared_ptr<arrow::DoubleArray> _pxArr;
     std::shared_ptr<arrow::Int64Array> _szArr;
-    std::shared_ptr<arrow::StringArray> _symArr;
-    std::shared_ptr<arrow::StringArray> _aggArr;
+    std::shared_ptr<arrow::Array> _symArr;
+    std::shared_ptr<arrow::Array> _aggArr;
+    bool _symLarge = false, _aggLarge = false;
     int64_t _rowInGroup = 0;
 
     int64_t _absoluteRow = 0; // physical row index across the whole file
@@ -95,8 +96,8 @@ private:
         _tsArr  = std::static_pointer_cast<arrow::TimestampArray>(_table->column(_tsPos)->chunk(0));
         _pxArr  = std::static_pointer_cast<arrow::DoubleArray>(_table->column(_pxPos)->chunk(0));
         _szArr  = std::static_pointer_cast<arrow::Int64Array>(_table->column(_szPos)->chunk(0));
-        _symArr = _symPos >= 0 ? std::static_pointer_cast<arrow::StringArray>(_table->column(_symPos)->chunk(0)) : nullptr;
-        _aggArr = _aggPos >= 0 ? std::static_pointer_cast<arrow::StringArray>(_table->column(_aggPos)->chunk(0)) : nullptr;
+        _symArr = _symPos >= 0 ? _table->column(_symPos)->chunk(0) : nullptr;
+        _aggArr = _aggPos >= 0 ? _table->column(_aggPos)->chunk(0) : nullptr;
     }
 
     void ensureRowLoaded(int64_t rowIdx) {
@@ -111,8 +112,14 @@ private:
         _rowInGroup = rowIdx - _rowGroupOffsets[static_cast<std::size_t>(_curGroup)];
     }
 
-    std::string_view curSymbol() const { return _symArr->GetView(_rowInGroup); }
-    std::string_view curSide()   const { return _aggArr->GetView(_rowInGroup); }
+    std::string_view curSymbol() const {
+        return _symLarge ? std::static_pointer_cast<arrow::LargeStringArray>(_symArr)->GetView(_rowInGroup)
+                         : std::static_pointer_cast<arrow::StringArray>(_symArr)->GetView(_rowInGroup);
+    }
+    std::string_view curSide() const {
+        return _aggLarge ? std::static_pointer_cast<arrow::LargeStringArray>(_aggArr)->GetView(_rowInGroup)
+                         : std::static_pointer_cast<arrow::StringArray>(_aggArr)->GetView(_rowInGroup);
+    }
     double  curPrice()   const { return _pxArr->Value(_rowInGroup); }
     int64_t curSizeRaw() const { return _szArr->Value(_rowInGroup); }
     long long curTsNanos() const { return static_cast<long long>(_tsArr->Value(_rowInGroup)) * _tsUnitMul; }
@@ -191,15 +198,19 @@ public:
 
         if (kCSVMapping.symbolCol >= 0) {
             auto symField = requireField(kCSVMapping.symbolCol, "symbol");
-            if (symField->type()->id() != arrow::Type::STRING)
+            auto sid = symField->type()->id();
+            if (sid != arrow::Type::STRING && sid != arrow::Type::LARGE_STRING)
                 throw std::runtime_error("ParquetMarketData: symbolCol must be a string column in " + path
                     + " (got " + symField->type()->ToString() + ")");
+            _symLarge = (sid == arrow::Type::LARGE_STRING);
         }
         if (kCSVMapping.aggressor >= 0) {
             auto aggField = requireField(kCSVMapping.aggressor, "aggressor");
-            if (aggField->type()->id() != arrow::Type::STRING)
+            auto aid = aggField->type()->id();
+            if (aid != arrow::Type::STRING && aid != arrow::Type::LARGE_STRING)
                 throw std::runtime_error("ParquetMarketData: aggressor column must be a string column in " + path
                     + " (got " + aggField->type()->ToString() + ")");
+            _aggLarge = (aid == arrow::Type::LARGE_STRING);
         }
 
         std::vector<int> cols = { kCSVMapping.timestampCol, kCSVMapping.priceCol, kCSVMapping.sizeCol };
