@@ -19,6 +19,13 @@ int main() {
     );
     addSeries("3", std::vector<std::vector<float>>{{1,2,3,4},{7,5,4,9}}, {"Cool Custom Name 1", "Cool Custom Name 2"}); // initSeriesPool only supports 1d
 
+    addHeatmap("heatmap demo", std::vector<float>{
+        1, 2, 3, 4, 5,
+        6, 7, 8, 9, 10,
+        11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20
+    }, 4, 5);
+
     addStat("bananas per second", 42.0f);
     addStat("moon distance (km)", 384400.0f);
     addStat("vibe score", 0.87f);

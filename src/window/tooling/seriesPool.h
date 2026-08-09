@@ -22,6 +22,8 @@ struct NamedSeries {
     bool onY2 = false;                          ///< default axis when added to a panel, right (Y2) vs left (Y1)
     bool xyBars = false;                        ///< true = data[0] is x, data[1] is y (e.g. a histogram) instead of index-based x
     float barWidth = 0.67f;                     ///< only used when xyBars is set
+    int heatmapRows = 0;                        ///< heatmap row count (type 2 only)
+    int heatmapCols = 0;                        ///< heatmap col count (type 2 only)
 
     int cols() const { return (int)data.size(); }       ///< number of columns (1 for a simple series)
     int rows() const { return data.empty() ? 0 : (int)data[0].size(); } ///< number of data points per column
@@ -87,6 +89,20 @@ void addXYBars(std::string name, std::vector<Tx> xs, std::vector<Ty> ys, float b
     NamedSeries s{std::move(name), {std::move(xf), std::move(yf)}, {}, 1, color, onY2};
     s.xyBars = true;
     s.barWidth = barWidth;
+    pool.push_back(std::move(s));
+}
+
+/// @brief add a heatmap series to the pool
+/// @param name   display name
+/// @param values flat row-major data (rows * cols elements)
+/// @param rows   number of rows
+/// @param cols   number of columns
+template<typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+void addHeatmap(std::string name, std::vector<T> values, int rows, int cols, RGBA color = {}) {
+    std::vector<float> flat(values.begin(), values.end());
+    NamedSeries s{std::move(name), {std::move(flat)}, {}, 2, color, false};
+    s.heatmapRows = rows;
+    s.heatmapCols = cols;
     pool.push_back(std::move(s));
 }
 
