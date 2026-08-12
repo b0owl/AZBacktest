@@ -36,11 +36,23 @@
 /// the mmapped buffer (only valid while MarketData is alive), plus a parsed
 /// volume. for nextTick, `size` is that tick's traded size; for nextClose,
 /// it's the summed volume across every tick in the bar
+///
+/// `timestamp`, `price` and `side` always describe a single row (the tick
+/// itself, or the bar's closing tick for nextClose). `size` and the three
+/// volume splits are aggregates over the whole bar when it came from nextClose.
+///
+/// executedBuys/executedSells split `size` by aggressor: buy-side volume is a
+/// buyer lifting the ask, sell-side volume is a seller hitting the bid. Rows
+/// whose side column matches neither alias (or when `aggressor` is -1 in the
+/// config) land in unknownVolume. The three always sum to `size`.
 struct Tick {
     std::string_view timestamp;
     std::string_view price;
     float size = 0.f;
     const char* side = kCSVMapping.unknownSideAggressorAlias;
+    float executedBuys   = 0.f;
+    float executedSells  = 0.f;
+    float unknownVolume  = 0.f;
 };
 
 namespace mdDetail {
@@ -342,13 +354,23 @@ public:
             kCSVMapping.timestampCol, kCSVMapping.aggressor, kCSVMapping.priceCol, kCSVMapping.sizeCol,
             t.timestamp, sideView, t.price, szView);
         std::from_chars(szView.data(), szView.data() + szView.size(), t.size);
-        if (sideView == kCSVMapping.buySideAggressorAlias) t.side = kCSVMapping.buySideAggressorAlias;
-        else if (sideView == kCSVMapping.sellSideAggressorAlias) t.side = kCSVMapping.sellSideAggressorAlias;
+        if (kCSVMapping.aggressor >= 0 && sideView == kCSVMapping.buySideAggressorAlias) {
+            t.side = kCSVMapping.buySideAggressorAlias;
+            t.executedBuys = t.size;
+        } else if (kCSVMapping.aggressor >= 0 && sideView == kCSVMapping.sellSideAggressorAlias) {
+            t.side = kCSVMapping.sellSideAggressorAlias;
+            t.executedSells = t.size;
+        } else {
+            t.unknownVolume = t.size;
+        }
         return t;
     }
 
     /// @brief close tick of the next window covering at least `seconds`,
-    /// t.size is the summed volume across every tick that fell inside the bar
+    /// t.size is the summed volume across every tick that fell inside the bar,
+    /// split across t.executedBuys / t.executedSells / t.unknownVolume by the
+    /// aggressor column. t.side is the side of the closing tick specifically
+    /// (same row the timestamp and price come from), not the bar as a whole
     /// @return the close tick (views into the underlying buffer), or nullopt at EOF
     std::optional<Tick> nextClose(int seconds) {
         _skipHeaderOnce();
@@ -358,16 +380,32 @@ public:
         _cur = (eol < _end) ? eol + 1 : _end;
 
         std::string_view firstTs = mdDetail::field(line, eol, kCSVMapping.timestampCol);
-        std::string_view firstSz = mdDetail::field(line, eol, kCSVMapping.sizeCol);
         std::string targetOwned  = mdDetail::endTimestamp(firstTs, seconds);
         std::string_view target(targetOwned);
 
-        float barVolume = 0.f;
-        {
+        float barVolume = 0.f, buys = 0.f, sells = 0.f, unknown = 0.f;
+        // the row's side alias, or nullptr when side classification is disabled
+        const char* rowSide = nullptr;
+
+        // parse one row's size and fold it into the running per-side totals
+        auto accumulate = [&](const char* l, const char* e) {
+            std::string_view szView = mdDetail::field(l, e, kCSVMapping.sizeCol);
             float sz = 0.f;
-            std::from_chars(firstSz.data(), firstSz.data() + firstSz.size(), sz);
+            std::from_chars(szView.data(), szView.data() + szView.size(), sz);
             barVolume += sz;
-        }
+
+            rowSide = nullptr;
+            if (kCSVMapping.aggressor >= 0) {
+                std::string_view sideView = mdDetail::field(l, e, kCSVMapping.aggressor);
+                if (sideView == kCSVMapping.buySideAggressorAlias)       rowSide = kCSVMapping.buySideAggressorAlias;
+                else if (sideView == kCSVMapping.sellSideAggressorAlias) rowSide = kCSVMapping.sellSideAggressorAlias;
+            }
+            if (rowSide == kCSVMapping.buySideAggressorAlias)       buys  += sz;
+            else if (rowSide == kCSVMapping.sellSideAggressorAlias) sells += sz;
+            else                                                    unknown += sz;
+        };
+
+        accumulate(line, eol);
 
         const char* lastLine = line;
         const char* lastEol  = eol;
@@ -382,16 +420,18 @@ public:
             lastLine = nline;
             lastEol  = neol;
             lastTs   = mdDetail::field(nline, neol, kCSVMapping.timestampCol);
-            std::string_view nsz = mdDetail::field(nline, neol, kCSVMapping.sizeCol);
-            float sz = 0.f;
-            std::from_chars(nsz.data(), nsz.data() + nsz.size(), sz);
-            barVolume += sz;
+            accumulate(nline, neol);
         }
 
         Tick t;
         t.timestamp = lastTs;
         t.price     = mdDetail::field(lastLine, lastEol, kCSVMapping.priceCol);
         t.size      = barVolume;
+        // rowSide is left pointing at the last row accumulate() saw, i.e. the close
+        if (rowSide) t.side = rowSide;
+        t.executedBuys  = buys;
+        t.executedSells = sells;
+        t.unknownVolume = unknown;
         return t;
     }
 };

@@ -51,11 +51,15 @@ enum class TradeDirection { Long, Short };
 /// volumes[i] is per-bar traded size (tick size for timeframe=0, summed bar
 /// volume for timeframe>0) so it can be fed straight into returnVolumeProfile
 /// deltas[i] is prices[i] minus the price before it (0 for the very first bar ever seen)
+/// executedBuys[i] + executedSells[i] <= volumes[i], the remainder being volume
+/// whose aggressor side couldn't be classified
+/// every vector here is the same length and indexed the same way, so
+/// executedBuys[i] always belongs to prices[i]
 struct DataWindow {
     std::vector<float> prices;
     std::vector<float> volumes;
-    std::vector<float> execBids; // executed bids
-    std::vector<float> execAsks; // executed asks
+    std::vector<float> executedBuys;  // volume that lifted the ask (buy aggressor)
+    std::vector<float> executedSells; // volume that hit the bid (sell aggressor)
     std::vector<float> deltas;
 };
 
@@ -207,8 +211,9 @@ public:
     int processedBars = 0;
     /// @brief pull `period` bars from the market data source, if timeframe is 0
     /// it reads raw ticks; otherwise it reads closes at that many seconds per bar.
-    /// returns parallel prices + volumes, callers usually std::move prices into
-    /// their `Handling`-bound vector and feed volumes into returnVolumeProfile
+    /// returns parallel prices + volumes + executedBuys/executedSells + deltas,
+    /// callers usually std::move prices into their `Handling`-bound vector and
+    /// feed volumes into returnVolumeProfile
     /// @param md       the MarketData source to read from
     /// @param period   how many rows/bars to load
     /// @param timeframe 0 = tick-by-tick, >0 = close every N seconds
@@ -218,15 +223,16 @@ public:
                                 bool supressWarnings=false, int tickRes=1) {
 
         if (!supressWarnings && tickRes != 1) {
-            std::cout << "Warning! If tickRes is above one, classifying volume by bids/asks will not work properly" << std::endl;
-            std::cout << "Supress these warnings by caling with the third argument being false" << std::endl;
+            std::cout << "Warning! If tickRes is above one, the discarded ticks' volume is dropped entirely," << std::endl;
+            std::cout << "so executedBuys/executedSells only cover the ticks that were kept" << std::endl;
+            std::cout << "Supress these warnings by calling with supressWarnings (the fifth argument) set to true" << std::endl;
         }
 
         DataWindow out;
         out.prices.reserve(period);
         out.volumes.reserve(period);
-        out.execAsks.reserve(period);
-        out.execBids.reserve(period);
+        out.executedSells.reserve(period);
+        out.executedBuys.reserve(period);
         out.deltas.reserve(period);
         windowTimestamps.clear();
         windowTimestamps.reserve(period);
@@ -247,16 +253,12 @@ public:
                 out.volumes.push_back(tick->size);
                 windowTimestamps.push_back(mdDetail::tsToEpochSeconds(tick->timestamp));
 
-                // calc execAsks/Bids from aggresor
-                if (tick->side == kCSVMapping.buySideAggressorAlias) { // hitting ask, buy
-                    out.execBids.push_back(tick->size); } 
-        
-                else if (tick->side == kCSVMapping.sellSideAggressorAlias) { // hitting bid, sell
-                    out.execAsks.push_back(tick->size); }
-                
-                else if (tick->side == kCSVMapping.unknownSideAggressorAlias) { // unknown
-                    whenUnknown(); } // called when the side is unknown to allow for custom behavior 
-                                     // cleanest solution, imo
+                // aggressor split, pushed unconditionally so these stay index-parallel
+                // with prices/volumes (a tick with no usable side contributes 0 to both)
+                out.executedBuys.push_back(tick->executedBuys);
+                out.executedSells.push_back(tick->executedSells);
+                if (tick->unknownVolume > 0.f) whenUnknown(); // custom behavior hook for
+                                                             // unclassifiable volume
 
                 processedBars++;
             }
@@ -272,15 +274,10 @@ public:
                 out.volumes.push_back(bar->size);
                 windowTimestamps.push_back(mdDetail::tsToEpochSeconds(bar->timestamp));
 
-                // calc execAsks/Bids from aggresor
-                if (bar->side == kCSVMapping.buySideAggressorAlias) {
-                    out.execBids.push_back(bar->size); }
-
-                else if (bar->side == kCSVMapping.sellSideAggressorAlias) {
-                    out.execAsks.push_back(bar->size); }
-
-                else if (bar->side == kCSVMapping.unknownSideAggressorAlias) {
-                    whenUnknown(); }
+                // per-bar aggressor split, summed across every tick in the bar
+                out.executedBuys.push_back(bar->executedBuys);
+                out.executedSells.push_back(bar->executedSells);
+                if (bar->unknownVolume > 0.f) whenUnknown();
 
                 processedBars++;
             }

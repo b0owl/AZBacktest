@@ -264,11 +264,16 @@ public:
             if (sideView == kCSVMapping.buySideAggressorAlias) t.side = kCSVMapping.buySideAggressorAlias;
             else if (sideView == kCSVMapping.sellSideAggressorAlias) t.side = kCSVMapping.sellSideAggressorAlias;
         }
+        if (t.side == kCSVMapping.buySideAggressorAlias)       t.executedBuys  = t.size;
+        else if (t.side == kCSVMapping.sellSideAggressorAlias) t.executedSells = t.size;
+        else                                                   t.unknownVolume = t.size;
 
         ++_absoluteRow;
         return t;
     }
 
+    /// @brief bar close over `seconds`, volume summed and split per aggressor
+    /// side, mirrors _MarketData::nextClose. t.side is the closing row's side
     std::optional<Tick> nextClose(int seconds) {
         if (!advanceToNextMatch()) return std::nullopt;
 
@@ -277,9 +282,29 @@ public:
         std::string targetOwned = mdDetail::endTimestamp(firstTs, seconds);
         std::string_view target(targetOwned);
 
-        float barVolume = static_cast<float>(curSizeRaw());
+        float barVolume = 0.f, buys = 0.f, sells = 0.f, unknown = 0.f;
+        // the row's side alias, or nullptr when side classification is disabled
+        const char* rowSide = nullptr;
+
+        // fold the row _absoluteRow currently points at into the running totals
+        auto accumulate = [&]() {
+            float sz = static_cast<float>(curSizeRaw());
+            barVolume += sz;
+
+            rowSide = nullptr;
+            if (_aggPos >= 0) {
+                std::string_view sideView = curSide();
+                if (sideView == kCSVMapping.buySideAggressorAlias)       rowSide = kCSVMapping.buySideAggressorAlias;
+                else if (sideView == kCSVMapping.sellSideAggressorAlias) rowSide = kCSVMapping.sellSideAggressorAlias;
+            }
+            if (rowSide == kCSVMapping.buySideAggressorAlias)       buys  += sz;
+            else if (rowSide == kCSVMapping.sellSideAggressorAlias) sells += sz;
+            else                                                    unknown += sz;
+        };
+
         double lastPx = curPrice();
         std::string lastTs = firstTs;
+        accumulate();
         ++_absoluteRow;
 
         while (std::string_view(lastTs) < target) {
@@ -287,7 +312,7 @@ public:
             int len = mdDetail::formatIsoTimestamp(_tsBuf, sizeof(_tsBuf), curTsNanos());
             lastTs.assign(_tsBuf, static_cast<std::size_t>(len));
             lastPx = curPrice();
-            barVolume += static_cast<float>(curSizeRaw());
+            accumulate();
             ++_absoluteRow;
         }
 
@@ -297,6 +322,11 @@ public:
         auto [ptr, ec] = std::to_chars(_pxBuf, _pxBuf + sizeof(_pxBuf), lastPx);
         t.price = std::string_view(_pxBuf, static_cast<std::size_t>(ptr - _pxBuf));
         t.size = barVolume;
+        // rowSide is left pointing at the last row accumulate() saw, i.e. the close
+        if (rowSide) t.side = rowSide;
+        t.executedBuys  = buys;
+        t.executedSells = sells;
+        t.unknownVolume = unknown;
         return t;
     }
 };

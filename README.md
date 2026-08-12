@@ -63,6 +63,9 @@ symbol     = ""
 symbolRoll = false
 
 # aggressor/side classification (set aggressor to -1 to disable)
+# these are the literal strings in your side column, not fixed labels - check
+# them against your data. Databento, for one, encodes the initiating side, so
+# it's "B" (bid side / buy aggressor) and "A" (ask side / sell aggressor)
 aggressor                = -1
 buySideAggressorAlias    = "B"
 sellSideAggressorAlias   = "S"
@@ -117,10 +120,14 @@ Memory-maps a CSV file for zero-copy tick reading.
 #### `std::optional<Tick> MarketData::nextTick()`
 Returns the next raw tick (timestamp + price as string_views, size, and aggressor side), or `nullopt` at EOF. The `side` field is a `const char*` set to the matching aggressor alias from `config.toml`.
 
+`Tick` also carries the volume split by aggressor: `executedBuys`, `executedSells`, and `unknownVolume`. For a tick exactly one of the three holds the whole `size`. They always sum to `size`.
+
 #### `std::optional<Tick> MarketData::nextClose(int seconds)`
 Returns the close tick of the next bar spanning at least `seconds`. Skips forward until the timestamp exceeds start + seconds.
 
 - `seconds` — bar width in seconds (e.g. 60 for 1-min bars)
+
+`timestamp`, `price`, and `side` come from the bar's closing row. `size` and the `executedBuys` / `executedSells` / `unknownVolume` split are sums over every tick that fell inside the bar, so the split is per-bar rather than per-tick.
 
 ---
 
@@ -156,7 +163,7 @@ Advances the open trade's P&L to current price and records an equity curve sampl
 - `timestamp` — if non-empty, gets parsed for equity curve timestamps
 
 #### `DataWindow Handling::requestDataWindow(MarketData& md, int period, int timeframe = 0, void (*whenUnknown)() = [](){}, bool supressWarnings = false, int tickRes = 1)`
-Pulls `period` bars from the market data source. Returns a `DataWindow` with parallel `prices`, `volumes`, `execBids`, `execAsks`, and `deltas` vectors.
+Pulls `period` bars from the market data source. Returns a `DataWindow` with parallel `prices`, `volumes`, `executedBuys`, `executedSells`, and `deltas` vectors.
 
 - `md` — MarketData source
 - `period` — how many rows/bars to load
@@ -165,7 +172,11 @@ Pulls `period` bars from the market data source. Returns a `DataWindow` with par
 - `supressWarnings` — set true to silence tickRes warnings
 - `tickRes` — tick mode only: keep every Nth tick (1 = full resolution)
 
-`execBids` and `execAsks` classify each tick's volume by aggressor side using the aliases configured in `config.toml`. If the data side column doesn't match either alias, `whenUnknown` is called instead. `deltas[i]` is the price change from the previous bar.
+`executedBuys[i]` is the volume that lifted the ask (buy aggressor) and `executedSells[i]` the volume that hit the bid (sell aggressor), classified with the aliases from `config.toml`. In tick mode one of the two carries the whole tick; in bar mode (`timeframe > 0`) both are sums across every tick in the bar. `deltas[i]` is the price change from the previous bar.
+
+All five vectors are the same length and share an index, so `executedBuys[i]` always belongs to `prices[i]`. Volume whose side matched neither alias is left out of both, meaning `executedBuys[i] + executedSells[i] <= volumes[i]`, and `whenUnknown` fires once per bar that contained any of it.
+
+Note that `tickRes > 1` drops the skipped ticks outright, so the split only covers ticks that were actually kept - it won't reconcile against `volumes` from another source at that setting.
 
 ---
 
