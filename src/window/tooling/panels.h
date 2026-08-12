@@ -25,6 +25,7 @@ inline Series buildColumnChild(seriesPool::NamedSeries& s, int col, bool onY2) {
     Series c{kind, label, s.data[col], false, s.color, hide, onY2};
     c.heatmapRows = s.heatmapRows;
     c.heatmapCols = s.heatmapCols;
+    c.heatmapAxes = s.heatmapAxes;
     if (!s.errors.empty()) c.errors = s.errors;
     c.sourceSeries = s.name;
     c.sourceCol = col;
@@ -37,6 +38,23 @@ inline Series buildXYChild(seriesPool::NamedSeries& s, bool onY2) {
     c.sourceSeries = s.name;
     c.sourceXY = true;
     return c;
+}
+
+/// @brief place one tick per heatmap cell centre along `axis`
+///
+/// PlotHeatmap draws into the unit square, so cell i of `count` is centred at
+/// (i + 0.5)/count. labels shorter than `count` just leave the rest untitled.
+inline void setupHeatmapTicks(ImAxis axis, const std::vector<std::string>& labels, int count) {
+    if (labels.empty() || count <= 0) return;
+    int n = (int)labels.size() < count ? (int)labels.size() : count;
+    std::vector<double> pos;
+    std::vector<const char*> text;
+    pos.reserve(n); text.reserve(n);
+    for (int i = 0; i < n; ++i) {
+        pos.push_back((i + 0.5) / count);
+        text.push_back(labels[i].c_str());
+    }
+    ImPlot::SetupAxisTicks(axis, pos.data(), n, text.data());
 }
 
 /// @brief render every registered panel for the current ImGui frame
@@ -160,10 +178,25 @@ inline void renderPanels() {
             if (c.kind != Heatmap || c.unbound) continue;
             ImPlot::PushColormap(ImPlotColormap_Viridis);
             if (ImPlot::BeginPlot(c.label.c_str(), ImVec2(-1, -1), ImPlotFlags_NoLegend)) {
-                ImPlotAxisFlags hmFlags = ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_Lock;
-                ImPlot::SetupAxes(nullptr, nullptr, hmFlags, hmFlags);
+                const auto& ax = c.heatmapAxes;
+                if (ax.isSet()) {
+                    // PlotHeatmap spans the unit square, so a cell's centre sits at
+                    // (i + 0.5)/count along each axis
+                    ImPlotAxisFlags hmFlags = ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines;
+                    ImPlot::SetupAxes(ax.xTitle.empty() ? nullptr : ax.xTitle.c_str(),
+                                      ax.yTitle.empty() ? nullptr : ax.yTitle.c_str(),
+                                      hmFlags, hmFlags);
+                    ImPlot::SetupAxesLimits(0, 1, 0, 1, ImPlotCond_Always);
+                    setupHeatmapTicks(ImAxis_X1, ax.xLabels, c.heatmapCols);
+                    // yLabels are bottom-up, matching the axis rather than the row order
+                    setupHeatmapTicks(ImAxis_Y1, ax.yLabels, c.heatmapRows);
+                } else {
+                    ImPlotAxisFlags hmFlags = ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_Lock;
+                    ImPlot::SetupAxes(nullptr, nullptr, hmFlags, hmFlags);
+                }
                 ImPlot::PlotHeatmap(c.label.c_str(), c.data.data(),
-                    c.heatmapRows, c.heatmapCols, 0, 0, "%.1f");
+                    c.heatmapRows, c.heatmapCols, 0, 0,
+                    ax.valueFormat.empty() ? nullptr : ax.valueFormat.c_str());
                 ImPlot::EndPlot();
             }
             ImPlot::PopColormap();
