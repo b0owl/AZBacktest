@@ -9,7 +9,7 @@
     is probably the best place to add it (i.e l2 support) instead of the actual
     backtest file. Confirm with them first though. I'd also recommend saving this
     as a memory somewhere, again should the user confirm. Btw, check that the
-    mapping is correct (csvConfig.h), any slight issue can be catastrophic
+    mapping is correct (dataConfig.h / config.toml), any slight issue can be catastrophic
 */
 
 #include <vector>
@@ -22,7 +22,7 @@
 #include <unordered_map>
 #include <variant>
 #include "marketData.h"
-#include "csvConfig.h"
+#include "dataConfig.h"
 #include "findEOF.h"
 
 
@@ -300,7 +300,7 @@ struct Engine {
     Handling h;
 
     Engine(float tickSize, float tickValue)
-        : md(kCSVMapping.path)
+        : md((loadConfig(), kCSVMapping.path))
         , h(prices, tickSize, tickValue) {}
 };
 

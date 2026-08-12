@@ -67,7 +67,8 @@ FILES=(
     "$SCRIPT_DIR/vendor/implot/implot.cpp"
     "$SCRIPT_DIR/vendor/implot/implot_items.cpp"
     # src
-    "$SCRIPT_DIR/csvConfig.h"
+    "$SCRIPT_DIR/src/tomlParser.h"
+    "$SCRIPT_DIR/dataConfig.h"
     "$SCRIPT_DIR/src/marketData.h"
     "$SCRIPT_DIR/src/findEOF.h"
     "$SCRIPT_DIR/src/backtestApi.h"

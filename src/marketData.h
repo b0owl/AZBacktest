@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "csvConfig.h"
+#include "dataConfig.h"
 
 #include <charconv>
 #include <cstdio>
@@ -73,7 +73,7 @@ inline CivilDate daysToCivil(long long z) {
 }
 
 /// @brief parse an ISO-8601 timestamp string into epoch seconds
-/// Y/M/D offsets come from csvConfig so different CSV formats just work
+/// Y/M/D offsets come from dataConfig so different CSV formats just work
 /// H/M/S offsets are hardcoded (they don't move around in ISO-8601)
 /// @param ts the raw timestamp string_view from the CSV row
 inline long long tsToEpochSeconds(std::string_view ts) {
