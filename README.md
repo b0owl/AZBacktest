@@ -2,7 +2,7 @@
 
 # AZBacktest
 
-**Before building, edit `csvConfig.h` to map your CSV columns and set the data path. The file ships with placeholder values that will not compile until filled in.**
+**Before building, edit `config.toml` to map your data columns and set the data path. If the file doesn't exist, the first run will generate one with placeholder values.**
 
 Release convention:  
 -> Every small feature *and* bugfix will result in an increment to the last number in the version name (i.e 1.0.0 to 1.0.1).  
@@ -42,12 +42,51 @@ Requires g++ with C++17 (C++20 if Parquet support is linked in, see below), GLFW
 
 ## Configuration
 
-Edit `csvConfig.h` to point at your CSV (or Parquet, see below) and map column indices.
+Edit `config.toml` to point at your data file (CSV or Parquet, see below) and map column indices.
+If `config.toml` doesn't exist, the first run will generate one with placeholder values and exit so you can fill it in.
 Note: If you use the header file (from releases) you'd have to search for the mapping itself, and change it directly.
+
+```toml
+# absolute path to the data file (CSV or Parquet)
+path = "C:/path/to/your/data.csv"
+
+# column indices (0-indexed)
+timestampCol = 0
+priceCol     = 8
+sizeCol      = 9
+
+skipHeader = true
+
+# symbol filtering (set symbolCol to -1 to disable)
+symbolCol  = -1
+symbol     = ""
+symbolRoll = false
+
+# aggressor/side classification (set aggressor to -1 to disable)
+aggressor                = -1
+buySideAggressorAlias    = "B"
+sellSideAggressorAlias   = "S"
+unknownSideAggressorAlias = "N"
+
+# trading costs (all in pts)
+commission = 0.0
+spread     = 0.0
+timingCost = 0.0
+
+# substring offsets for pulling Y/M/D out of the timestamp column
+# defaults match Databento's ISO-8601 format: 2025-06-01T22:00:00.065308005Z
+[dateFormat]
+yearOffset  = 0
+yearLength  = 4
+monthOffset = 5
+monthLength = 2
+dayOffset   = 8
+dayLength   = 2
+```
 
 ### Parquet support
 
-`MarketData` also reads Parquet files directly - point `kCSVMapping.path` at a `.parquet`
+`MarketData` also reads Parquet files directly - point `path` at a `.parquet`
 file instead of a `.csv` one, keeping the same column indices (`timestampCol`, `priceCol`,
 etc). The Parquet file needs the same column order/names as your CSV, with each column
 given a proper type (timestamps, doubles, ints) instead of raw text - usually several times
@@ -63,28 +102,10 @@ This needs [Apache Arrow](https://arrow.apache.org/):
   or at `C:\vcpkg` / `C:\tools\vcpkg` if that's unset.
 
 `build.sh` auto-detects Arrow and links it in when present; without it, builds still work
-but are CSV-only (pointing `kCSVMapping.path` at a `.parquet` file without Arrow compiled in
+but are CSV-only (pointing `path` at a `.parquet` file without Arrow compiled in
 throws a clear error at startup telling you to install it). Since Arrow's headers require
 C++20, `build.sh` bumps the standard to C++20 automatically whenever it links Arrow in -
 only for builds that use it, CSV-only builds stay on C++17.
-
-```cpp
-inline constexpr CSVMapping kCSVMapping{
-    PLACEHOLDER_VALUE,              // timestampCol (int)
-    PLACEHOLDER_VALUE,              // priceCol (int)
-    PLACEHOLDER_VALUE,              // sizeCol (int)
-    PLACEHOLDER_VALUE,              // path (const char*)
-    { PLACEHOLDER_VALUE },          // dateFormat (DateFormat: yearOff, yearLen, monthOff, monthLen, dayOff, dayLen)
-    PLACEHOLDER_VALUE,              // skipHeader (bool)
-    PLACEHOLDER_VALUE,              // symbolCol (int, -1 to disable)
-    PLACEHOLDER_VALUE,              // symbol (const char*)
-    PLACEHOLDER_VALUE,              // symbolRoll (bool)
-    PLACEHOLDER_VALUE,              // aggressor (int)
-    PLACEHOLDER_VALUE,              // buySideAggressorAlias (const char*)
-    PLACEHOLDER_VALUE,              // sellSideAggressorAlias (const char*)
-    PLACEHOLDER_VALUE,              // unknownSideAggressorAlias (const char*)
-};
-```
 
 ## API Reference
 
@@ -94,7 +115,7 @@ inline constexpr CSVMapping kCSVMapping{
 Memory-maps a CSV file for zero-copy tick reading.
 
 #### `std::optional<Tick> MarketData::nextTick()`
-Returns the next raw tick (timestamp + price as string_views, size, and aggressor side), or `nullopt` at EOF. The `side` field is a `const char*` set to the matching aggressor alias from `csvConfig.h`.
+Returns the next raw tick (timestamp + price as string_views, size, and aggressor side), or `nullopt` at EOF. The `side` field is a `const char*` set to the matching aggressor alias from `config.toml`.
 
 #### `std::optional<Tick> MarketData::nextClose(int seconds)`
 Returns the close tick of the next bar spanning at least `seconds`. Skips forward until the timestamp exceeds start + seconds.
@@ -105,12 +126,13 @@ Returns the close tick of the next bar spanning at least `seconds`. Skips forwar
 
 ### Trade Management
 
-#### `Handling(std::vector<float>& prices, float tickSize, float tickValue)`
+#### `Handling(std::vector<float>& prices, float tickSize, float tickValue, bool calculateCosts)`
 Manages trade lifecycle. Binds a live price vector (by reference) and per-instrument tick metadata.
 
 - `prices` — live price window, Handling reads `.back()` for entries
 - `tickSize` — instrument tick size
 - `tickValue` — instrument tick value
+- `calculateCosts` — if true, commission + spread + timingCost are subtracted on each close
 
 #### `int Handling::openLong(int idx)`
 Opens a long at the current price. Returns 1 if opened, 0 if already in a long.
@@ -133,26 +155,37 @@ Advances the open trade's P&L to current price and records an equity curve sampl
 
 - `timestamp` — if non-empty, gets parsed for equity curve timestamps
 
-#### `DataWindow Handling::requestDataWindow(MarketData& md, int period, void (*whenUnknown)(), bool supressWarnings = false, int timeframe = 0, int tickRes = 1)`
+#### `DataWindow Handling::requestDataWindow(MarketData& md, int period, int timeframe = 0, void (*whenUnknown)() = [](){}, bool supressWarnings = false, int tickRes = 1)`
 Pulls `period` bars from the market data source. Returns a `DataWindow` with parallel `prices`, `volumes`, `execBids`, `execAsks`, and `deltas` vectors.
 
 - `md` — MarketData source
 - `period` — how many rows/bars to load
+- `timeframe` — 0 = tick-by-tick, >0 = close every N seconds
 - `whenUnknown` — callback invoked when the aggressor side can't be classified
 - `supressWarnings` — set true to silence tickRes warnings
-- `timeframe` — 0 = tick-by-tick, >0 = close every N seconds
 - `tickRes` — tick mode only: keep every Nth tick (1 = full resolution)
 
-`execBids` and `execAsks` classify each tick's volume by aggressor side using the aliases configured in `csvConfig.h`. If the CSV side column doesn't match either alias, `whenUnknown` is called instead. `deltas[i]` is the price change from the previous bar.
+`execBids` and `execAsks` classify each tick's volume by aggressor side using the aliases configured in `config.toml`. If the data side column doesn't match either alias, `whenUnknown` is called instead. `deltas[i]` is the price change from the previous bar.
+
+---
+
+### Engine
+
+#### `Engine setupEngine(float tickSize, float tickValue, bool calculateCosts = true)`
+Convenience wrapper that loads `config.toml`, opens the data file, and bundles `prices`, `MarketData`, and `Handling` into one object.
+
+- `tickSize` — instrument tick size
+- `tickValue` — instrument tick value
+- `calculateCosts` — passed through to `Handling`
 
 ---
 
 ### Indicators
 
-#### `std::vector<float> returnSimpleMovingAverage(const std::vector<float>& prices, int period)`
-Simple moving average over the tail of `prices`. Returns `period` output points.
+#### `std::vector<float> returnSimpleMovingAverage(const std::vector<float>& data, int period)`
+Simple moving average over the tail of `data`. Returns `period` output points.
 
-- `prices` — full price vector
+- `data` — full data vector
 - `period` — lookback length
 
 #### `std::vector<float> returnExponentialMovingAverage(const std::vector<float>& prices, int period)`
@@ -221,11 +254,12 @@ Average P&L of trades matching `pred`.
 
 ### Monte Carlo
 
-#### `std::vector<std::vector<float>> returnMonteCarlo(int sims, int avgBlockLen = 5, unsigned seed = 42)`
+#### `std::vector<std::vector<float>> returnMonteCarlo(int sims, int avgBlockLen = 5, int bucketSecs = 0, unsigned seed = 42)`
 Stationary bootstrap MC. Resamples blocks of consecutive trades with geometrically distributed lengths.
 
 - `sims` — number of simulations
 - `avgBlockLen` — expected block length (controls serial dependence)
+- `bucketSecs` — if > 0, aggregate trade PnLs into time buckets before bootstrapping (86400 = daily)
 - `seed` — RNG seed for reproducibility
 - Returns `paths[sim][step]`
 
@@ -256,6 +290,29 @@ Adds a 2D series (multiple columns) to the pool.
 - `colNames` — optional per-column names
 - `type` — 0 = line, 1 = bar
 - `color` — optional RGBA color
+
+#### `void addScatter(std::string name, std::vector<T> values, RGBA color = {})`
+Adds a scatter plot series.
+
+- `name` — display name
+- `values` — data points
+- `color` — optional RGBA color
+
+#### `void addErrorBars(std::string name, std::vector<T> values, std::vector<Te> errors, RGBA color = {})`
+Adds a line series with symmetric error bars.
+
+- `name` — display name
+- `values` — center values per point
+- `errors` — error magnitude per point (same length as values)
+- `color` — optional RGBA color
+
+#### `void addHeatmap(std::string name, std::vector<T> values, int rows, int cols, RGBA color = {})`
+Adds a heatmap series.
+
+- `name` — display name
+- `values` — flat row-major data (rows * cols elements)
+- `rows` — number of rows
+- `cols` — number of columns
 
 #### `void initSeriesPool(std::vector<std::vector<float>> data, std::vector<std::string> names, std::vector<int> types)`
 Batch init, clears the pool and adds each inner vector as a 1-column series.

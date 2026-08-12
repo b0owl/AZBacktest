@@ -8,7 +8,7 @@
 
 #ifdef AZBT_PARQUET
 
-#include "csvConfig.h"
+#include "dataConfig.h"
 
 #include <algorithm>
 #include <charconv>
@@ -44,7 +44,7 @@ inline long long tsUnitToNanoMultiplier(arrow::TimeUnit::type unit) {
 /// MarketData can dispatch to either backend by file extension.
 ///
 /// The Parquet file is expected to mirror the CSV column layout 1:1 (same
-/// column indices as csvConfig.h), just typed instead of all-text.
+/// column indices as dataConfig.h), just typed instead of all-text.
 /// timestamp/price come back through Tick as
 /// string_views into a per-instance buffer (formatted on demand from the
 /// typed Arrow values), so every existing consumer (tsToEpochSeconds,

@@ -9,7 +9,7 @@
     is probably the best place to add it (i.e l2 support) instead of the actual
     backtest file. Confirm with them first though. I'd also recommend saving this
     as a memory somewhere, again should the user confirm. Btw, check that the
-    mapping is correct (csvConfig.h), any slight issue can be catastrophic
+    mapping is correct (dataConfig.h / config.toml), any slight issue can be catastrophic
 */
 
 #include <vector>
@@ -22,7 +22,7 @@
 #include <unordered_map>
 #include <variant>
 #include "marketData.h"
-#include "csvConfig.h"
+#include "dataConfig.h"
 #include "findEOF.h"
 
 
@@ -111,6 +111,8 @@ private:
     float _tickSize;
     float _tickValue;
 
+    bool _calculateCosts;
+
     void newLong(int idx) {
         openTrade.emplace(_prices.back(), idx, _tickSize, _tickValue, TradeDirection::Long);
         inLong = true;
@@ -127,8 +129,8 @@ public:
     /// @param prices    live price window; Handling reads `.back()` at each entry
     /// @param tickSize  instrument tick size, forwarded to Trade
     /// @param tickValue instrument tick value, forwarded to Trade
-    Handling(std::vector<float>& prices, float tickSize, float tickValue)
-        : _prices(prices), _tickSize(tickSize), _tickValue(tickValue) {}
+    Handling(std::vector<float>& prices, float tickSize, float tickValue, bool calculateCosts)
+        : _prices(prices), _tickSize(tickSize), _tickValue(tickValue), _calculateCosts(calculateCosts) {}
 
     // Trade management
     std::optional<Trade> openTrade;
@@ -164,7 +166,10 @@ public:
     void closeTrade() {
         // TODO - Overlapping trades support
         openTrade->td.closeEpochSec = lastEpochSec;
-        realizedProfit += openTrade->td.profit;
+        
+        if (_calculateCosts) realizedProfit += (openTrade->td.profit - (kCSVMapping.commision + kCSVMapping.spread + kCSVMapping.timingCost));
+        else realizedProfit += openTrade->td.profit;
+
         openTrade->lockTrade(); openTrade.reset(); inLong=false; inShort=false;
     }
 
@@ -299,13 +304,13 @@ struct Engine {
     MarketData md;
     Handling h;
 
-    Engine(float tickSize, float tickValue)
-        : md(kCSVMapping.path)
-        , h(prices, tickSize, tickValue) {}
+    Engine(float tickSize, float tickValue, bool calculateCosts = true)
+        : md((loadConfig(), kCSVMapping.path))
+        , h(prices, tickSize, tickValue, calculateCosts) {}
 };
 
-Engine setupEngine(float tickSize, float tickValue) {
-    return Engine(tickSize, tickValue);
+Engine setupEngine(float tickSize, float tickValue, bool calculateCosts = true) {
+    return Engine(tickSize, tickValue, calculateCosts);
 }
 
 // ---- COMPILED DATA START ---- //
