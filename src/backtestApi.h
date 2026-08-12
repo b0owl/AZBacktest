@@ -127,8 +127,8 @@ public:
     /// @param prices    live price window; Handling reads `.back()` at each entry
     /// @param tickSize  instrument tick size, forwarded to Trade
     /// @param tickValue instrument tick value, forwarded to Trade
-    Handling(std::vector<float>& prices, float tickSize, float tickValue)
-        : _prices(prices), _tickSize(tickSize), _tickValue(tickValue) {}
+    Handling(std::vector<float>& prices, float tickSize, float tickValue, bool calculateCosts)
+        : _prices(prices), _tickSize(tickSize), _tickValue(tickValue), _calculateCosts(calculateCosts) {}
 
     // Trade management
     std::optional<Trade> openTrade;
@@ -164,7 +164,10 @@ public:
     void closeTrade() {
         // TODO - Overlapping trades support
         openTrade->td.closeEpochSec = lastEpochSec;
-        realizedProfit += openTrade->td.profit;
+        
+        if (_calculateCosts) realizedProfit += (openTrade->td.profit - (kCSVMapping.commision + kCSVMapping.spread + kCSVMapping.timingCost));
+        else realizedProfit += openTrade->td.profit
+
         openTrade->lockTrade(); openTrade.reset(); inLong=false; inShort=false;
     }
 
@@ -299,13 +302,13 @@ struct Engine {
     MarketData md;
     Handling h;
 
-    Engine(float tickSize, float tickValue)
+    Engine(float tickSize, float tickValue, bool calculateCosts = true)
         : md((loadConfig(), kCSVMapping.path))
-        , h(prices, tickSize, tickValue) {}
+        , h(prices, tickSize, tickValue, calculateCosts) {}
 };
 
-Engine setupEngine(float tickSize, float tickValue) {
-    return Engine(tickSize, tickValue);
+Engine setupEngine(float tickSize, float tickValue, bool calculateCosts = true) {
+    return Engine(tickSize, tickValue, calculateCosts);
 }
 
 // ---- COMPILED DATA START ---- //
