@@ -11,68 +11,9 @@
 
 #include "seriesPool.h"
 
+#include "management.h"
+
 namespace panelManagement {
-
-/// @brief kind of series a panel can host
-enum SeriesKind { Line, Bar };
-
-/// @brief a single series belonging to a panel
-struct Series {
-    SeriesKind kind;
-    std::string label;
-    std::vector<float> data;
-    bool unbound = false;
-    seriesPool::RGBA color;  ///< -1 = let ImPlot pick
-    bool legendHidden = false; ///< true = plot but don't show in legend
-    bool onY2 = false;         ///< true = plot against the secondary (right) y-axis
-    std::vector<float> xs;     ///< non-empty = explicit x per point (e.g. histogram), else index-based
-    float barWidth = 0.67f;    ///< only used when xs is non-empty
-
-    // provenance, used to persist + restore this child from the .ini: which pool
-    // series it was pulled from (empty = raw data added via newLine/BarSeries,
-    // not restorable) and whether it came from the xyBars or per-column branch
-    std::string sourceSeries;
-    bool sourceXY = false;
-    int sourceCol = -1;
-};
-
-/// @brief a panel window that owns any number of child series
-struct Panel {
-    std::string id;                  ///< unique id; also drives the ImGui window title
-    std::vector<Series> children;    ///< series currently attached to this panel
-    bool axesLocked = false;         ///< true = x/y axes can't be panned or zoomed
-    bool axesAutoFit = true;         ///< true = x/y axes auto-fit to data extents every frame
-};
-
-/// @brief all active panels, rendered each frame by renderPanels()
-inline std::vector<Panel> panels;
-
-/// @brief find a panel by id, or nullptr if it doesn't exist
-inline Panel* findPanel(const std::string& id) {
-    for (auto& p : panels) {
-        if (p.id == id) return &p;
-    }
-    return nullptr;
-}
-
-/// @brief register a new panel; no-op if `id` already exists
-inline void newPanel(std::string id) {
-    if (findPanel(id) == nullptr) {
-        panels.push_back({id, {}});
-    }
-}
-
-/// @brief lowest id not already in use, so newly-created panels don't collide
-/// with ones just restored from the .ini
-inline int nextPanelId() {
-    int maxId = -1;
-    for (auto& p : panels) {
-        char* endp = nullptr;
-        long v = std::strtol(p.id.c_str(), &endp, 10);
-        if (endp != p.id.c_str() && *endp == '\0' && v > maxId) maxId = (int)v;
-    }
-    return maxId + 1;
-}
 
 /// @brief build a panel child for one column of a pool series
 inline Series buildColumnChild(seriesPool::NamedSeries& s, int col, bool onY2) {
@@ -80,7 +21,11 @@ inline Series buildColumnChild(seriesPool::NamedSeries& s, int col, bool onY2) {
     // for large multi-column series (clouds), hide individual legend entries
     bool hide = s.cols() > 10 && col > 0;
     if (hide) label = "##" + s.name + "_" + std::to_string(col);
-    Series c{s.type == 1 ? Bar : Line, label, s.data[col], false, s.color, hide, onY2};
+    SeriesKind kind = s.type == 4 ? ErrorBar : s.type == 3 ? Scatter : s.type == 2 ? Heatmap : (s.type == 1 ? Bar : Line);
+    Series c{kind, label, s.data[col], false, s.color, hide, onY2};
+    c.heatmapRows = s.heatmapRows;
+    c.heatmapCols = s.heatmapCols;
+    if (!s.errors.empty()) c.errors = s.errors;
     c.sourceSeries = s.name;
     c.sourceCol = col;
     return c;
@@ -157,39 +102,71 @@ inline void renderPanels() {
             }
         }
 
-        if (ImPlot::BeginPlot(p.id.c_str(), ImVec2(-1, -1))) {
-            // "Lock axes" / "Auto-fit axes" above toggle these per-panel;
-            // axes start unlocked + auto-fitting by default
-            ImPlotAxisFlags lockFlags = p.axesLocked ? ImPlotAxisFlags_Lock : ImPlotAxisFlags_None;
-            ImPlotAxisFlags fitFlags  = p.axesAutoFit ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
-            ImPlotAxisFlags baseFlags = lockFlags | fitFlags;
+        // check if this panel has any non-heatmap children
+        bool hasStandard = false, hasHeatmap = false;
+        for (auto& c : p.children) {
+            if (c.unbound) continue;
+            if (c.kind == Heatmap) hasHeatmap = true;
+            else hasStandard = true;
+        }
 
-            // Y2 stays hidden/auto-fit unless a series actually opts into it
-            ImPlotAxisFlags y2Flags = ImPlotAxisFlags_AuxDefault | baseFlags;
-            bool anyOnY2 = false;
-            for (auto& c : p.children) if (c.onY2) { anyOnY2 = true; break; }
-            if (!anyOnY2) y2Flags |= ImPlotAxisFlags_NoDecorations;
+        if (hasStandard) {
+            if (ImPlot::BeginPlot(p.id.c_str(), ImVec2(-1, hasHeatmap ? 0 : -1))) {
+                ImPlotAxisFlags lockFlags = p.axesLocked ? ImPlotAxisFlags_Lock : ImPlotAxisFlags_None;
+                ImPlotAxisFlags fitFlags  = p.axesAutoFit ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
+                ImPlotAxisFlags baseFlags = lockFlags | fitFlags;
 
-            ImPlot::SetupAxis(ImAxis_X1, nullptr, baseFlags);
-            ImPlot::SetupAxis(ImAxis_Y1, nullptr, baseFlags);
-            ImPlot::SetupAxis(ImAxis_Y2, nullptr, y2Flags);
+                ImPlotAxisFlags y2Flags = ImPlotAxisFlags_AuxDefault | baseFlags;
+                bool anyOnY2 = false;
+                for (auto& c : p.children) if (c.onY2) { anyOnY2 = true; break; }
+                if (!anyOnY2) y2Flags |= ImPlotAxisFlags_NoDecorations;
 
-            for (auto& c : p.children) {
-                if (c.unbound) continue;
-                if (c.color.isSet()) {
-                    ImVec4 cv(c.color.r, c.color.g, c.color.b, c.color.a);
-                    ImPlot::SetNextLineStyle(cv);
-                    ImPlot::SetNextFillStyle(cv);
+                ImPlot::SetupAxis(ImAxis_X1, nullptr, baseFlags);
+                ImPlot::SetupAxis(ImAxis_Y1, nullptr, baseFlags);
+                ImPlot::SetupAxis(ImAxis_Y2, nullptr, y2Flags);
+
+                for (auto& c : p.children) {
+                    if (c.unbound || c.kind == Heatmap) continue;
+                    if (c.color.isSet()) {
+                        ImVec4 cv(c.color.r, c.color.g, c.color.b, c.color.a);
+                        ImPlot::SetNextLineStyle(cv);
+                        ImPlot::SetNextFillStyle(cv);
+                        ImPlot::SetNextMarkerStyle(IMPLOT_AUTO, IMPLOT_AUTO, cv);
+                    }
+                    ImPlot::SetAxes(ImAxis_X1, c.onY2 ? ImAxis_Y2 : ImAxis_Y1);
+                    if (c.kind == Scatter)
+                        ImPlot::PlotScatter(c.label.c_str(), c.data.data(), (int)c.data.size());
+                    else if (c.kind == ErrorBar) {
+                        ImPlot::PlotLine(c.label.c_str(), c.data.data(), (int)c.data.size());
+                        if (!c.errors.empty()) {
+                            int n = (int)c.data.size();
+                            std::vector<float> xs(n);
+                            for (int i = 0; i < n; i++) xs[i] = (float)i;
+                            ImPlot::PlotErrorBars(c.label.c_str(), xs.data(), c.data.data(), c.errors.data(), n);
+                        }
+                    }
+                    else if (c.kind == Line)
+                        ImPlot::PlotLine(c.label.c_str(), c.data.data(), (int)c.data.size());
+                    else if (!c.xs.empty())
+                        ImPlot::PlotBars(c.label.c_str(), c.xs.data(), c.data.data(), (int)c.data.size(), c.barWidth);
+                    else
+                        ImPlot::PlotBars(c.label.c_str(), c.data.data(), (int)c.data.size());
                 }
-                ImPlot::SetAxes(ImAxis_X1, c.onY2 ? ImAxis_Y2 : ImAxis_Y1);
-                if (c.kind == Line)
-                    ImPlot::PlotLine(c.label.c_str(), c.data.data(), (int)c.data.size());
-                else if (!c.xs.empty())
-                    ImPlot::PlotBars(c.label.c_str(), c.xs.data(), c.data.data(), (int)c.data.size(), c.barWidth);
-                else
-                    ImPlot::PlotBars(c.label.c_str(), c.data.data(), (int)c.data.size());
+                ImPlot::EndPlot();
             }
-            ImPlot::EndPlot();
+        }
+
+        for (auto& c : p.children) {
+            if (c.kind != Heatmap || c.unbound) continue;
+            ImPlot::PushColormap(ImPlotColormap_Viridis);
+            if (ImPlot::BeginPlot(c.label.c_str(), ImVec2(-1, -1), ImPlotFlags_NoLegend)) {
+                ImPlotAxisFlags hmFlags = ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_Lock;
+                ImPlot::SetupAxes(nullptr, nullptr, hmFlags, hmFlags);
+                ImPlot::PlotHeatmap(c.label.c_str(), c.data.data(),
+                    c.heatmapRows, c.heatmapCols, 0, 0, "%.1f");
+                ImPlot::EndPlot();
+            }
+            ImPlot::PopColormap();
         }
 
         ImGui::End();

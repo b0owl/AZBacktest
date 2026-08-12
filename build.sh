@@ -9,7 +9,7 @@
 #
 # Behavior:
 #   - Auto-discovers sibling .cpp files matching #include "X.h" directives and links them.
-#   - Adds the project root to the include path so csvConfig.h is available anywhere.
+#   - Adds the project root to the include path so dataConfig.h is available anywhere.
 #   - Runs the binary from the target file's own directory so its relative paths work.
 #   - Deletes the built executable when done.
 

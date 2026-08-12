@@ -8,61 +8,9 @@
 #include "seriesPool.h"
 #include "statPool.h"
 
+#include "management.h"
+
 namespace widgetManagement {
-
-/// @brief what kind of widget this is, add new kinds here as you build them
-enum WidgetKind { SeriesExplorer, StatisticExplorer };
-
-/// @brief a single widget instance living inside a WidgetWindow
-/// each widget kind can stash its own state in here (e.g. selectedSeriesIdx
-/// for the series explorer)
-struct Widget {
-    WidgetKind kind;
-    std::string label;
-
-    // SeriesExplorer state
-    int selectedSeriesIdx = -1;
-
-    // StatisticExplorer state
-    std::vector<int> selectedStatIdxs;
-};
-
-/// @brief a top-level ImGui window that holds widgets, you get one of these
-/// every time you click New -> Widget in the menu bar
-struct WidgetWindow {
-    std::string id;
-    std::vector<Widget> children;
-};
-
-/// @brief all active widget windows, rendered each frame by renderWindows()
-inline std::vector<WidgetWindow> windows;
-
-/// @brief find a widget window by id, or nullptr if it doesn't exist
-inline WidgetWindow* findWindow(const std::string& id) {
-    for (auto& w : windows) {
-        if (w.id == id) return &w;
-    }
-    return nullptr;
-}
-
-/// @brief register a new widget window; no-op if `id` already exists
-inline void newWindow(std::string id) {
-    if (findWindow(id) == nullptr) {
-        windows.push_back({id, {}});
-    }
-}
-
-/// @brief lowest id not already in use, so newly-created windows don't collide
-/// with ones just restored from the .ini
-inline int nextWindowId() {
-    int maxId = -1;
-    for (auto& w : windows) {
-        char* endp = nullptr;
-        long v = std::strtol(w.id.c_str(), &endp, 10);
-        if (endp != w.id.c_str() && *endp == '\0' && v > maxId) maxId = (int)v;
-    }
-    return maxId + 1;
-}
 
 /// @brief renders the popup that lists available widget types, if the user
 /// picks one it gets appended to the window's children

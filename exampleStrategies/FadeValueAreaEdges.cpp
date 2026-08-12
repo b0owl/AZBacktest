@@ -20,6 +20,7 @@
 
 int main() {
     // prices has to outlive handler, which holds a reference to it
+    loadConfig();
     std::vector<float> prices;
     MarketData md(kCSVMapping.path);
     Handling handler(prices, 0.25f, 0.50f);

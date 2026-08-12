@@ -6,4 +6,5 @@ imgui.ini
 *.parquet
 *.DS_Store
 Data/glbx-mdp3-20250601-20260514.tbbo.parquet
+/AZBacktest.code-workspace
 config.toml
