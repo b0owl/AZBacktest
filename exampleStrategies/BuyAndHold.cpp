@@ -10,6 +10,7 @@
 int main() {
     // removes some boilerplate code, not necessarily needed but cleaner to use
     // prices has to outlive handler, which holds a reference to it
+    loadConfig();
     std::vector<float> prices;
     MarketData md(kCSVMapping.path);
     Handling handler(prices, 0.25, 0.50);

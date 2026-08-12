@@ -5,5 +5,6 @@
 using seriesPool::RGBA;
 using seriesPool::addSeries;
 using seriesPool::addXYBars;
+using seriesPool::addHeatmap;
 using seriesPool::initSeriesPool;
 using statPool::addStat;
