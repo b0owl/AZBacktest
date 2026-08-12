@@ -85,6 +85,7 @@ struct Series {
     float barWidth = 0.67f;    ///< only used when xs is non-empty
     int heatmapRows = 0;       ///< heatmap row count (type 2 only)
     int heatmapCols = 0;       ///< heatmap col count (type 2 only)
+    seriesPool::HeatmapAxes heatmapAxes; ///< optional row/column labelling (Heatmap kind only)
     std::vector<float> errors; ///< per-point error magnitude (ErrorBar kind only)
 
     // provenance, used to persist + restore this child from the .ini: which pool

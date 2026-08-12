@@ -11,6 +11,26 @@ struct RGBA {
     bool isSet() const { return r >= 0; }
 };
 
+/// @brief optional axis labelling for a heatmap
+///
+/// a heatmap's cells carry no meaning without knowing what each row and column
+/// stands for, and the numbers printed in the cells don't say it. leave this
+/// default and the plot renders bare (the old behavior).
+///
+/// xLabels run left to right, yLabels run BOTTOM to top the way a y axis reads,
+/// regardless of the fact that the data itself is row-major from the top down.
+/// supply one label per column/row, or fewer and the rest go untitled.
+struct HeatmapAxes {
+    std::vector<std::string> xLabels;
+    std::vector<std::string> yLabels;
+    std::string xTitle;
+    std::string yTitle;
+    std::string valueFormat = "%.1f"; ///< printf format for the number drawn in each cell
+
+    bool isSet() const { return !xLabels.empty() || !yLabels.empty()
+                             || !xTitle.empty() || !yTitle.empty(); }
+};
+
 /// @brief one entry in the global series pool
 /// data is column-major: data[col][row], a simple 1D series has one column
 struct NamedSeries {
@@ -24,6 +44,7 @@ struct NamedSeries {
     float barWidth = 0.67f;                     ///< only used when xyBars is set
     int heatmapRows = 0;                        ///< heatmap row count (type 2 only)
     int heatmapCols = 0;                        ///< heatmap col count (type 2 only)
+    HeatmapAxes heatmapAxes;                    ///< optional row/column labelling (type 2 only)
     std::vector<float> errors;                  ///< per-point error magnitude (type 4 only)
 
     int cols() const { return (int)data.size(); }       ///< number of columns (1 for a simple series)
@@ -95,15 +116,18 @@ void addXYBars(std::string name, std::vector<Tx> xs, std::vector<Ty> ys, float b
 
 /// @brief add a heatmap series to the pool
 /// @param name   display name
-/// @param values flat row-major data (rows * cols elements)
+/// @param values flat row-major data (rows * cols elements), first row drawn on top
 /// @param rows   number of rows
 /// @param cols   number of columns
+/// @param axes   optional axis titles + per-row/column tick labels, see HeatmapAxes
 template<typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
-void addHeatmap(std::string name, std::vector<T> values, int rows, int cols, RGBA color = {}) {
+void addHeatmap(std::string name, std::vector<T> values, int rows, int cols, RGBA color = {},
+                HeatmapAxes axes = {}) {
     std::vector<float> flat(values.begin(), values.end());
     NamedSeries s{std::move(name), {std::move(flat)}, {}, 2, color, false};
     s.heatmapRows = rows;
     s.heatmapCols = cols;
+    s.heatmapAxes = std::move(axes);
     pool.push_back(std::move(s));
 }
 
