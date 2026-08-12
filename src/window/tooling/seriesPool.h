@@ -24,6 +24,7 @@ struct NamedSeries {
     float barWidth = 0.67f;                     ///< only used when xyBars is set
     int heatmapRows = 0;                        ///< heatmap row count (type 2 only)
     int heatmapCols = 0;                        ///< heatmap col count (type 2 only)
+    std::vector<float> errors;                  ///< per-point error magnitude (type 4 only)
 
     int cols() const { return (int)data.size(); }       ///< number of columns (1 for a simple series)
     int rows() const { return data.empty() ? 0 : (int)data[0].size(); } ///< number of data points per column
@@ -103,6 +104,34 @@ void addHeatmap(std::string name, std::vector<T> values, int rows, int cols, RGB
     NamedSeries s{std::move(name), {std::move(flat)}, {}, 2, color, false};
     s.heatmapRows = rows;
     s.heatmapCols = cols;
+    pool.push_back(std::move(s));
+}
+
+/// @brief add a scatter plot series to the pool
+/// @param name   display name
+/// @param values data points
+/// @param color  optional RGBA color
+/// @param onY2   default axis when added to a panel
+template<typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+void addScatter(std::string name, std::vector<T> values, RGBA color = {}, bool onY2 = false) {
+    std::vector<float> col(values.begin(), values.end());
+    pool.push_back({std::move(name), {std::move(col)}, {}, 3, color, onY2});
+}
+
+/// @brief add a line series with error bars to the pool
+/// @param name   display name
+/// @param values center values per point
+/// @param errors error magnitude per point (symmetric, same length as values)
+/// @param color  optional RGBA color
+/// @param onY2   default axis when added to a panel
+template<typename T, typename Te,
+         typename = std::enable_if_t<std::is_arithmetic_v<T> && std::is_arithmetic_v<Te>>>
+void addErrorBars(std::string name, std::vector<T> values, std::vector<Te> errors,
+                  RGBA color = {}, bool onY2 = false) {
+    std::vector<float> col(values.begin(), values.end());
+    std::vector<float> err(errors.begin(), errors.end());
+    NamedSeries s{std::move(name), {std::move(col)}, {}, 4, color, onY2};
+    s.errors = std::move(err);
     pool.push_back(std::move(s));
 }
 

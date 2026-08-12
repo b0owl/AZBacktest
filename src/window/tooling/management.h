@@ -70,7 +70,7 @@ inline int nextWindowId() {
 namespace panelManagement {
 
 /// @brief kind of series a panel can host
-enum SeriesKind { Line, Bar, Heatmap };
+enum SeriesKind { Line, Bar, Heatmap, Scatter, ErrorBar };
 
 /// @brief a single series belonging to a panel
 struct Series {
@@ -85,6 +85,7 @@ struct Series {
     float barWidth = 0.67f;    ///< only used when xs is non-empty
     int heatmapRows = 0;       ///< heatmap row count (type 2 only)
     int heatmapCols = 0;       ///< heatmap col count (type 2 only)
+    std::vector<float> errors; ///< per-point error magnitude (ErrorBar kind only)
 
     // provenance, used to persist + restore this child from the .ini: which pool
     // series it was pulled from (empty = raw data added via newLine/BarSeries,

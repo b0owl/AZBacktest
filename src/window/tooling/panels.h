@@ -21,10 +21,11 @@ inline Series buildColumnChild(seriesPool::NamedSeries& s, int col, bool onY2) {
     // for large multi-column series (clouds), hide individual legend entries
     bool hide = s.cols() > 10 && col > 0;
     if (hide) label = "##" + s.name + "_" + std::to_string(col);
-    SeriesKind kind = s.type == 2 ? Heatmap : (s.type == 1 ? Bar : Line);
+    SeriesKind kind = s.type == 4 ? ErrorBar : s.type == 3 ? Scatter : s.type == 2 ? Heatmap : (s.type == 1 ? Bar : Line);
     Series c{kind, label, s.data[col], false, s.color, hide, onY2};
     c.heatmapRows = s.heatmapRows;
     c.heatmapCols = s.heatmapCols;
+    if (!s.errors.empty()) c.errors = s.errors;
     c.sourceSeries = s.name;
     c.sourceCol = col;
     return c;
@@ -130,9 +131,21 @@ inline void renderPanels() {
                         ImVec4 cv(c.color.r, c.color.g, c.color.b, c.color.a);
                         ImPlot::SetNextLineStyle(cv);
                         ImPlot::SetNextFillStyle(cv);
+                        ImPlot::SetNextMarkerStyle(IMPLOT_AUTO, IMPLOT_AUTO, cv);
                     }
                     ImPlot::SetAxes(ImAxis_X1, c.onY2 ? ImAxis_Y2 : ImAxis_Y1);
-                    if (c.kind == Line)
+                    if (c.kind == Scatter)
+                        ImPlot::PlotScatter(c.label.c_str(), c.data.data(), (int)c.data.size());
+                    else if (c.kind == ErrorBar) {
+                        ImPlot::PlotLine(c.label.c_str(), c.data.data(), (int)c.data.size());
+                        if (!c.errors.empty()) {
+                            int n = (int)c.data.size();
+                            std::vector<float> xs(n);
+                            for (int i = 0; i < n; i++) xs[i] = (float)i;
+                            ImPlot::PlotErrorBars(c.label.c_str(), xs.data(), c.data.data(), c.errors.data(), n);
+                        }
+                    }
+                    else if (c.kind == Line)
                         ImPlot::PlotLine(c.label.c_str(), c.data.data(), (int)c.data.size());
                     else if (!c.xs.empty())
                         ImPlot::PlotBars(c.label.c_str(), c.xs.data(), c.data.data(), (int)c.data.size(), c.barWidth);
