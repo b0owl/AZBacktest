@@ -111,6 +111,8 @@ private:
     float _tickSize;
     float _tickValue;
 
+    bool _calculateCosts;
+
     void newLong(int idx) {
         openTrade.emplace(_prices.back(), idx, _tickSize, _tickValue, TradeDirection::Long);
         inLong = true;
@@ -166,7 +168,7 @@ public:
         openTrade->td.closeEpochSec = lastEpochSec;
         
         if (_calculateCosts) realizedProfit += (openTrade->td.profit - (kCSVMapping.commision + kCSVMapping.spread + kCSVMapping.timingCost));
-        else realizedProfit += openTrade->td.profit
+        else realizedProfit += openTrade->td.profit;
 
         openTrade->lockTrade(); openTrade.reset(); inLong=false; inShort=false;
     }
