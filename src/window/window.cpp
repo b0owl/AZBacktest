@@ -13,8 +13,8 @@
 #include "string"
 
 #include "tooling/windowManagement.h"
-#include "tooling/panelManagement.h"
-#include "tooling/widgetManagement.h"
+#include "tooling/panels.h"
+#include "tooling/widgets.h"
 
 ///@name Panel Series API
 ///@{

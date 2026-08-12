@@ -11,70 +11,9 @@
 
 #include "seriesPool.h"
 
+#include "management.h"
+
 namespace panelManagement {
-
-/// @brief kind of series a panel can host
-enum SeriesKind { Line, Bar, Heatmap };
-
-/// @brief a single series belonging to a panel
-struct Series {
-    SeriesKind kind;
-    std::string label;
-    std::vector<float> data;
-    bool unbound = false;
-    seriesPool::RGBA color;  ///< -1 = let ImPlot pick
-    bool legendHidden = false; ///< true = plot but don't show in legend
-    bool onY2 = false;         ///< true = plot against the secondary (right) y-axis
-    std::vector<float> xs;     ///< non-empty = explicit x per point (e.g. histogram), else index-based
-    float barWidth = 0.67f;    ///< only used when xs is non-empty
-    int heatmapRows = 0;       ///< heatmap row count (type 2 only)
-    int heatmapCols = 0;       ///< heatmap col count (type 2 only)
-
-    // provenance, used to persist + restore this child from the .ini: which pool
-    // series it was pulled from (empty = raw data added via newLine/BarSeries,
-    // not restorable) and whether it came from the xyBars or per-column branch
-    std::string sourceSeries;
-    bool sourceXY = false;
-    int sourceCol = -1;
-};
-
-/// @brief a panel window that owns any number of child series
-struct Panel {
-    std::string id;                  ///< unique id; also drives the ImGui window title
-    std::vector<Series> children;    ///< series currently attached to this panel
-    bool axesLocked = false;         ///< true = x/y axes can't be panned or zoomed
-    bool axesAutoFit = true;         ///< true = x/y axes auto-fit to data extents every frame
-};
-
-/// @brief all active panels, rendered each frame by renderPanels()
-inline std::vector<Panel> panels;
-
-/// @brief find a panel by id, or nullptr if it doesn't exist
-inline Panel* findPanel(const std::string& id) {
-    for (auto& p : panels) {
-        if (p.id == id) return &p;
-    }
-    return nullptr;
-}
-
-/// @brief register a new panel; no-op if `id` already exists
-inline void newPanel(std::string id) {
-    if (findPanel(id) == nullptr) {
-        panels.push_back({id, {}});
-    }
-}
-
-/// @brief lowest id not already in use, so newly-created panels don't collide
-/// with ones just restored from the .ini
-inline int nextPanelId() {
-    int maxId = -1;
-    for (auto& p : panels) {
-        char* endp = nullptr;
-        long v = std::strtol(p.id.c_str(), &endp, 10);
-        if (endp != p.id.c_str() && *endp == '\0' && v > maxId) maxId = (int)v;
-    }
-    return maxId + 1;
-}
 
 /// @brief build a panel child for one column of a pool series
 inline Series buildColumnChild(seriesPool::NamedSeries& s, int col, bool onY2) {
