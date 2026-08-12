@@ -47,8 +47,13 @@ inline Table parse(const std::string& path) {
         std::string key = trim(line.substr(0, eq));
         std::string val = trim(line.substr(eq + 1));
 
-        // strip inline comments outside of quoted strings
-        if (!val.empty() && val.front() != '"') {
+        // strip inline comments, respecting quoted strings
+        if (!val.empty() && val.front() == '"') {
+            // find the closing quote, then strip anything after it
+            auto close = val.find('"', 1);
+            if (close != std::string::npos)
+                val = val.substr(0, close + 1);
+        } else if (!val.empty()) {
             auto hash = val.find('#');
             if (hash != std::string::npos)
                 val = trim(val.substr(0, hash));

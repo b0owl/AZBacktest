@@ -91,16 +91,6 @@ sizeCol      = 0
 # set to true if the CSV has a header row to skip
 skipHeader = true
 
-# substring offsets for pulling Y/M/D out of the timestamp column
-# defaults match Databento's ISO-8601 format: 2025-06-01T22:00:00.065308005Z
-[dateFormat]
-yearOffset  = 0
-yearLength  = 4
-monthOffset = 5
-monthLength = 2
-dayOffset   = 8
-dayLength   = 2
-
 # symbol filtering (set symbolCol to -1 to disable)
 symbolCol  = -1
 symbol     = ""
@@ -116,6 +106,16 @@ unknownSideAggressorAlias = "N"
 commission = 0.0
 spread     = 0.0
 timingCost = 0.0
+
+# substring offsets for pulling Y/M/D out of the timestamp column
+# defaults match Databento's ISO-8601 format: 2025-06-01T22:00:00.065308005Z
+[dateFormat]
+yearOffset  = 0
+yearLength  = 4
+monthOffset = 5
+monthLength = 2
+dayOffset   = 8
+dayLength   = 2
 )";
 }
 
