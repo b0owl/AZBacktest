@@ -16,7 +16,7 @@ int main() {
     Handling handler(prices, 0.25, 0.50);
 
     std::cout << "Fetching EOF..." << std::endl;
-    handler.fetchEOF(60); // sets h.eof to eof, 60 = 60 second tf (sets bar count properly)
+    handler.fetchEOF(60); // sets handler.eof to eof, 60 = 60 second tf (sets bar count properly)
     std::cout << "EOF Found, continuing..." << std::endl;
     int batchSize = 500;
     int i = 0;
