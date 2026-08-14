@@ -299,11 +299,11 @@ public:
 struct Engine {
     std::vector<float> prices;
     MarketData md;
-    Handling h;
+    Handling handler;
 
     Engine(float tickSize, float tickValue, bool calculateCosts = true)
         : md((loadConfig(), kCSVMapping.path))
-        , h(prices, tickSize, tickValue, calculateCosts) {}
+        , handler(prices, tickSize, tickValue, calculateCosts) {}
 };
 
 Engine setupEngine(float tickSize, float tickValue, bool calculateCosts = true) {

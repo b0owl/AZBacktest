@@ -8,7 +8,7 @@
 #include "../src/skins/dark.h"
 
 int main() {
-    auto e = setupEngine(0.25f, 0.50f);
+    auto engine = setupEngine(0.25f, 0.50f);
 
     int shortPeriod = 100;
     int longPeriod  = 200;
@@ -17,49 +17,49 @@ int main() {
     float stopLoss   = 50.f;
 
     std::cout << "Fetching EOF..." << std::endl;
-    e.h.fetchEOF(60);
+    engine.handler.fetchEOF(60);
     std::cout << "EOF Found, continuing..." << std::endl;
 
     int batchSize = 500;
     int i = 0;
     while (true) {
-        auto window = e.h.requestDataWindow(e.md, batchSize, 60);
+        auto window = engine.handler.requestDataWindow(engine.md, batchSize, 60);
         if (window.prices.empty()) break;
-        e.prices = std::move(window.prices);
+        engine.prices = std::move(window.prices);
 
-        if ((int)e.prices.size() < (longPeriod * 2)) continue;
+        if ((int)engine.prices.size() < (longPeriod * 2)) continue;
 
-        float shortMaVal = returnSimpleMovingAverage(e.prices, shortPeriod).back();
-        float longMaVal  = returnSimpleMovingAverage(e.prices, longPeriod).back();
+        float shortMaVal = returnSimpleMovingAverage(engine.prices, shortPeriod).back();
+        float longMaVal  = returnSimpleMovingAverage(engine.prices, longPeriod).back();
 
         bool shortAboveLong = shortMaVal > longMaVal;
         bool shortBelowLong = shortMaVal < longMaVal;
 
-        for (int b = 0; b < (int)e.prices.size(); b++) {
+        for (int b = 0; b < (int)engine.prices.size(); b++) {
             i++;
-            if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << e.h.eof << std::endl; }
+            if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << engine.handler.eof << std::endl; }
 
-            float saved = e.prices.back();
-            e.prices.back() = e.prices[b];
-            e.h.tick();
+            float saved = engine.prices.back();
+            engine.prices.back() = engine.prices[b];
+            engine.handler.tick();
 
             // tp/sl handling
-            if (e.h.openTrade) {
-                float pnl = e.h.openTrade->td.profit;
-                if (pnl >= takeProfit || pnl <= -stopLoss) e.h.closeTrade();
+            if (engine.handler.openTrade) {
+                float pnl = engine.handler.openTrade->td.profit;
+                if (pnl >= takeProfit || pnl <= -stopLoss) engine.handler.closeTrade();
             }
 
             // exits first so we can immediately flip into the opposite side on the same bar
-            if (e.h.inLong && shortBelowLong)  e.h.closeTrade();
-            if (e.h.inShort && shortAboveLong) e.h.closeTrade();
+            if (engine.handler.inLong && shortBelowLong)  engine.handler.closeTrade();
+            if (engine.handler.inShort && shortAboveLong) engine.handler.closeTrade();
 
             // entries
-            if (!e.h.inLong && shortAboveLong)  e.h.openLong(i);
-            if (!e.h.inShort && shortBelowLong) e.h.openShort(i);
+            if (!engine.handler.inLong && shortAboveLong)  engine.handler.openLong(i);
+            if (!engine.handler.inShort && shortBelowLong) engine.handler.openShort(i);
 
-            e.prices.back() = saved;
+            engine.prices.back() = saved;
         }
-    } e.h.closeAll();
+    } engine.handler.closeAll();
 
     // monte carlo (daily bucketed)
     int mcSims = 60;

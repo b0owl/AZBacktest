@@ -19,7 +19,7 @@
 #include "../src/skins/dark.h"
 
 int main() {
-    auto e = setupEngine(0.25f, 0.50f);
+    auto engine = setupEngine(0.25f, 0.50f);
 
     float takeProfit = 100.f;
     float stopLoss   = 50.f;
@@ -41,20 +41,20 @@ int main() {
     int i = 0;
     long long prevEpoch = 0;
     while (true) {
-        auto window = e.h.requestDataWindow(e.md, batchSize, 30);
+        auto window = engine.handler.requestDataWindow(engine.md, batchSize, 30);
         if (window.prices.empty()) break;
-        e.prices = std::move(window.prices);
+        engine.prices = std::move(window.prices);
         auto& volumes = window.volumes;
 
-        for (int b = 0; b < (int)e.prices.size(); b++) {
+        for (int b = 0; b < (int)engine.prices.size(); b++) {
             i++;
-            float px = e.prices[b];
-            long long epochSec = e.h.windowTimestamps[b];
+            float px = engine.prices[b];
+            long long epochSec = engine.handler.windowTimestamps[b];
 
             // skip bars that span data gaps, not real 30s bars
             if (prevEpoch > 0 && (epochSec - prevEpoch) > 120) {
-                if (e.h.openTrade) {
-                    e.h.closeTrade();
+                if (engine.handler.openTrade) {
+                    engine.handler.closeTrade();
                 }
                 prevEpoch = epochSec;
                 continue;
@@ -64,13 +64,13 @@ int main() {
             int tod = (int)(epochSec % 86400);
 
             if (tod < rthOpen || tod >= rthClose) {
-                if (e.h.openTrade) {
-                    float saved = e.prices.back();
-                    e.prices.back() = px;
-                    e.h.lastEpochSec = epochSec;
-                    e.h.tick();
-                    e.h.closeTrade();
-                    e.prices.back() = saved;
+                if (engine.handler.openTrade) {
+                    float saved = engine.prices.back();
+                    engine.prices.back() = px;
+                    engine.handler.lastEpochSec = epochSec;
+                    engine.handler.tick();
+                    engine.handler.closeTrade();
+                    engine.prices.back() = saved;
                 }
                 continue;
             }
@@ -87,7 +87,7 @@ int main() {
             dailyPrices.push_back(px);
             dailyVolume.push_back(volumes[b]);
 
-            if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << e.h.eof << std::endl; }
+            if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << engine.handler.eof << std::endl; }
 
             if (tod - rthOpen < warmupSecs) continue;
 
@@ -103,26 +103,26 @@ int main() {
 
             if (val == 0.f && vah == 0.f) continue;
 
-            float saved = e.prices.back();
-            e.prices.back() = px;
-            e.h.lastEpochSec = epochSec;
-            e.h.tick();
+            float saved = engine.prices.back();
+            engine.prices.back() = px;
+            engine.handler.lastEpochSec = epochSec;
+            engine.handler.tick();
 
-            if (e.h.openTrade) {
-                float pnl = e.h.openTrade->td.profit;
-                if (pnl >= takeProfit || pnl <= -stopLoss) e.h.closeTrade();
+            if (engine.handler.openTrade) {
+                float pnl = engine.handler.openTrade->td.profit;
+                if (pnl >= takeProfit || pnl <= -stopLoss) engine.handler.closeTrade();
             }
 
             float mid = (val + vah) / 2.f;
-            if (!e.h.inShort && px >= vah) { e.h.openShort(i); targetMid = mid; }
-            if (!e.h.inLong  && px <= val) { e.h.openLong(i);  targetMid = mid; }
+            if (!engine.handler.inShort && px >= vah) { engine.handler.openShort(i); targetMid = mid; }
+            if (!engine.handler.inLong  && px <= val) { engine.handler.openLong(i);  targetMid = mid; }
 
-            if (e.h.inShort && px <= targetMid) e.h.closeTrade();
-            if (e.h.inLong  && px >= targetMid) e.h.closeTrade();
+            if (engine.handler.inShort && px <= targetMid) engine.handler.closeTrade();
+            if (engine.handler.inLong  && px >= targetMid) engine.handler.closeTrade();
 
-            e.prices.back() = saved;
+            engine.prices.back() = saved;
         }
-    } e.h.closeAll();
+    } engine.handler.closeAll();
 
     // monte carlo (daily bucketed)
     int mcSims = 60;

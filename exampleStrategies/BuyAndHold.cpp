@@ -9,30 +9,30 @@
 
 int main() {
     // removes some boilerplate code, not necessarily needed but cleaner to use
-    auto e = setupEngine(0.25, 0.50); // tickSize & tickValue
+    auto engine = setupEngine(0.25, 0.50); // tickSize & tickValue
 
     std::cout << "Fetching EOF..." << std::endl;
-    e.h.fetchEOF(60); // sets h.eof to eof, 60 = 60 second tf (sets bar count properly)
+    engine.handler.fetchEOF(60); // sets handler.eof to eof, 60 = 60 second tf (sets bar count properly)
     std::cout << "EOF Found, continuing..." << std::endl;
     int batchSize = 500;
     int i = 0;
     while (true) {
-        auto window = e.h.requestDataWindow(e.md, batchSize, 60);
+        auto window = engine.handler.requestDataWindow(engine.md, batchSize, 60);
         if (window.prices.empty()) break;
-        e.prices = std::move(window.prices);
+        engine.prices = std::move(window.prices);
 
-        for (int b = 0; b < (int)e.prices.size(); b++) {
+        for (int b = 0; b < (int)engine.prices.size(); b++) {
             i++;
-            if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << e.h.eof << std::endl; }
+            if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << engine.handler.eof << std::endl; }
 
-            e.h.openLong(i);
+            engine.handler.openLong(i);
 
-            float saved = e.prices.back();
-            e.prices.back() = e.prices[b];
-            e.h.tick();
-            e.prices.back() = saved;
+            float saved = engine.prices.back();
+            engine.prices.back() = engine.prices[b];
+            engine.handler.tick();
+            engine.prices.back() = saved;
         }
-    } e.h.closeAll();
+    } engine.handler.closeAll();
 
     // monte carlo (daily bucketed)
     int mcSims = 60;
