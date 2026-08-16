@@ -3,7 +3,7 @@
  * @brief upstream exposure to internal panel / window management systems
  */
 
-
+#define GL_SILENCE_DEPRECATION
 #include <GLFW/glfw3.h>
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"

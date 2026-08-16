@@ -49,8 +49,16 @@ inline int findEof(const char* path, int timeframe=1, int strideIncrement=2) {
     if (!firstTick) return 0;
     long long startSec = mdDetail::tsToEpochSeconds(firstTick->timestamp);
 
+    // lastValidOff may point one past the last valid row (especially for
+    // Parquet where offsets are row indices). Try reading from there first;
+    // if it fails, back up one position. The -1 fallback is safe for Parquet
+    // (row index arithmetic) but would land mid-line for CSV, so guard it.
     md.seekTo(lastValidOff);
     auto lastTick = md.nextTick();
+    if (!lastTick && lastValidOff > 0 && isParquetPath(path)) {
+        md.seekTo(lastValidOff - 1);
+        lastTick = md.nextTick();
+    }
     if (!lastTick) return 0;
     long long endSec = mdDetail::tsToEpochSeconds(lastTick->timestamp);
 

@@ -18,6 +18,7 @@
 #include <charconv>
 #include <cmath>
 #include <algorithm>
+#include <utility>
 #include <random>
 #include <iostream>
 #include <unordered_map>
@@ -189,23 +190,25 @@ public:
     /// @param timestamp if non-empty, gets parsed and used to stamp equity
     /// curve entries + trade close times, leave blank if you don't care about time
     // returns state directly if you want ownership at whatever time
-    bool tick(std::string_view timestamp = {}) {
+    std::pair<bool,bool> tick(long long epochSec) {
         if (openTrade) openTrade->advanceIdx(_prices.back());
-        if (!timestamp.empty()) {
-            long long ts = mdDetail::tsToEpochSeconds(timestamp);
-            lastEpochSec = ts;
-            float unreal = openTrade ? openTrade->td.profit : 0.f;
-            float eq = realizedProfit + unreal;
-            // Dedupe to at most one sample per second, collapses per-tick spam
-            // while preserving enough resolution for any minute-scale bucketing.
-            if (!equityCurve.empty() && equityCurve.back().first == ts) {
-                equityCurve.back().second = eq;
-            } else {
-                equityCurve.emplace_back(ts, eq);
-            }
+        lastEpochSec = epochSec;
+        float unreal = openTrade ? openTrade->td.profit : 0.f;
+        float eq = realizedProfit + unreal;
+        if (!equityCurve.empty() && equityCurve.back().first == epochSec) {
+            equityCurve.back().second = eq;
+        } else {
+            equityCurve.emplace_back(epochSec, eq);
         }
-        bool state[2] = {inLong, inShort};
-        return state;
+        return {inLong, inShort};
+    }
+
+    std::pair<bool,bool> tick(std::string_view timestamp = {}) {
+        if (timestamp.empty()) {
+            if (openTrade) openTrade->advanceIdx(_prices.back());
+            return {inLong, inShort};
+        }
+        return tick(mdDetail::tsToEpochSeconds(timestamp));
     }
 
     // Data processing
@@ -323,6 +326,7 @@ public:
     /// `data` needs a length of at least period*2, only the tail gets touched
     /// @param period lookback length
     std::vector<float> returnRollingMovingAverage(int period) {
+        if ((int)data.size() < period * 2) return {};
         std::vector<float> requiredChunk(data.end() - (period*2), data.end());
         std::vector<float> avgOverTime;
 
@@ -357,6 +361,7 @@ public:
     /// accumulators are doubles since sumSq cancellation gets ugly on price-scale floats
     /// @param period lookback length
     std::vector<float> returnRollingStandardDeviation(int period) {
+        if ((int)data.size() < period * 2) return {};
         std::vector<float> requiredChunk(data.end() - (period*2), data.end());
         std::vector<float> stdDevOverTime;
 
@@ -382,6 +387,7 @@ public:
     /// a flat window (zero stddev) yields 0 rather than a div by zero
     /// @param period lookback length
     std::vector<float> returnRollingZScore(int period) {
+        if ((int)data.size() < period * 2) return {};
         std::vector<float> requiredChunk(data.end() - (period*2), data.end());
         std::vector<float> zOverTime;
 
@@ -425,6 +431,7 @@ public:
     /// standard EMA formula from there
     /// @param period lookback / smoothing length
     std::vector<float> returnExponentialMovingAverage(int period) {
+        if ((int)prices.size() < period * 2) return {};
         std::vector<float> requiredChunk(prices.end() - (period*2), prices.end());
         std::vector<float> emaOverTime;
 
