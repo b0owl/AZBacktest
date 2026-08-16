@@ -3,7 +3,7 @@
 
 # absolute path to the data file (CSV or Parquet)
 # use an absolute path so it resolves correctly regardless of working directory
-path = "/Users/b0owl/Quant/AZBacktest/Data/glbx-mdp3-full.parquet"
+path = "C:/path/to/your/data.csv"
 
 # column indices (0-indexed)
 timestampCol = 0
