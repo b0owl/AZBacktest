@@ -93,9 +93,11 @@ int main() {
 
             barsSinceProfile++;
             if (barsSinceProfile >= 50 || val == 0.f) {
-                auto profile = returnVolumeProfile(0, dailyPrices, dailyVolume);
+                // rebuilt each time so it picks up the bars added since the last profile
+                PriceAnalytics pa(dailyPrices, dailyVolume);
+                auto profile = pa.returnVolumeProfile(0);
                 if (!profile.empty()) {
-                    auto va = returnValueArea(profile);
+                    auto va = pa.returnValueArea(profile);
                     val = va[0]; vah = va[1];
                 }
                 barsSinceProfile = 0;

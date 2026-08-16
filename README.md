@@ -193,38 +193,73 @@ Convenience wrapper that loads `config.toml`, opens the data file, and bundles `
 
 ### Indicators
 
-#### `std::vector<float> returnSimpleMovingAverage(const std::vector<float>& data, int period)`
-Simple moving average over the tail of `data`. Returns `period` output points.
+Indicators live on two classes. You construct one with the data you want analyzed, then call methods on it - the data is a constructor argument instead of being threaded through every call.
 
-- `data` — full data vector
+`SetAnalytics` works on any single `std::vector<float>`: prices, deltas, trade PnLs, whatever. `PriceAnalytics` is the price-and-volume flavor, and it's where anything needing both vectors lives. Both copy the vectors they're handed, so a long-lived instance holds a snapshot - rebuild it when your data grows.
+
+```cpp
+PriceAnalytics pa(engine.prices);
+float sma = pa.returnSimpleMovingAverage(200).back();
+
+PriceAnalytics vp(dailyPrices, dailyVolume);
+auto va = vp.returnValueArea(vp.returnVolumeProfile(0));
+
+SetAnalytics deltas(window.deltas);
+float z = deltas.returnRollingZScore(50).back();
+```
+
+#### `SetAnalytics(std::vector<float> data)`
+Generic analytics over one series.
+
+Every rolling method shares the same tail-slice convention: it reads the last `period*2` values of `data` and returns `period` output points, one per point after the warmup window fills. So `data` needs a length of at least `period*2`, and the outputs of any two rolling methods at the same `period` line up index for index.
+
+#### `std::vector<float> SetAnalytics::returnRollingMovingAverage(int period)`
+Rolling moving average over the tail of `data`.
+
 - `period` — lookback length
 
-#### `std::vector<float> returnExponentialMovingAverage(const std::vector<float>& prices, int period)`
+#### `float SetAnalytics::returnStandardDeviation()`
+Population standard deviation over the whole set, one scalar. Returns 0 for fewer than 2 values.
+
+#### `std::vector<float> SetAnalytics::returnRollingStandardDeviation(int period)`
+Population standard deviation per point, over each value's own trailing window.
+
+- `period` — lookback length
+
+#### `std::vector<float> SetAnalytics::returnRollingZScore(int period)`
+How many standard deviations each value sits from the mean of its own trailing window. A flat window (zero stddev) yields 0 rather than dividing by zero.
+
+- `period` — lookback length
+
+#### `PriceAnalytics(std::vector<float> prices = {}, std::vector<float> volume = {})`
+Price-and-volume analytics. Methods that only need prices leave `volume` unused, so you can omit it for those.
+
+#### `std::vector<float> PriceAnalytics::returnSimpleMovingAverage(int period)`
+Simple moving average over the tail of `prices`. Thin wrapper over `SetAnalytics::returnRollingMovingAverage`.
+
+- `period` — lookback length
+
+#### `std::vector<float> PriceAnalytics::returnExponentialMovingAverage(int period)`
 Exponential moving average, same tail-slice convention as SMA.
 
-- `prices` — full price vector
 - `period` — lookback / smoothing length
 
-#### `std::vector<std::vector<float>> returnVolumeProfile(int anchor, std::vector<float>& prices, std::vector<float> volumeData)`
-Builds a volume profile from `anchor` forward.
+#### `std::vector<std::vector<float>> PriceAnalytics::returnVolumeProfile(int anchor)`
+Builds a volume profile from `anchor` forward. Needs `volume`.
 
 - `anchor` — starting index (everything before is ignored)
-- `prices` — price vector
-- `volumeData` — per-bar volume, same length as prices
 - Returns `[[price, volume], ...]`
 
-#### `std::vector<float> returnValueArea(std::vector<std::vector<float>> volumeProfile, float pct = 0.70f)`
+#### `std::vector<float> PriceAnalytics::returnValueArea(std::vector<std::vector<float>> volumeProfile, float pct = 0.70f)`
 Returns `{VAL, VAH}`, the price range containing `pct` of total volume.
 
 - `volumeProfile` — output of `returnVolumeProfile`
 - `pct` — fraction of volume to capture (default 0.70)
 
-#### `std::vector<float> returnVWAP(int anchor, const std::vector<float>& prices, const std::vector<float>& volumeData)`
-Anchored volume-weighted average price, running/cumulative from `anchor` forward. One output value per bar (parallel to `prices[anchor..]`), so `.back()` is the current VWAP.
+#### `std::vector<float> PriceAnalytics::returnVWAP(int anchor)`
+Anchored volume-weighted average price, running/cumulative from `anchor` forward. One output value per bar (parallel to `prices[anchor..]`), so `.back()` is the current VWAP. Needs `volume`.
 
 - `anchor` — starting index (everything before is ignored); reset it to the first bar of a session for a daily VWAP
-- `prices` — price vector
-- `volumeData` — per-bar volume, same length as prices
 
 ---
 

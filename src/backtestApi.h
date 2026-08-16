@@ -16,6 +16,7 @@
 #include <fstream>
 #include <string>
 #include <charconv>
+#include <cmath>
 #include <algorithm>
 #include <random>
 #include <iostream>
@@ -310,139 +311,217 @@ Engine setupEngine(float tickSize, float tickValue, bool calculateCosts = true) 
     return Engine(tickSize, tickValue, calculateCosts);
 }
 
-// ---- COMPILED DATA START ---- //
+class SetAnalytics {
+private:
+    std::vector<float> data;   
 
+public:
+    SetAnalytics(std::vector<float> data) : data(data) {}
 
-/// @brief simple moving average over the tail end of `data`, uses the last
-/// period*2 values so you get `period` output points (one per bar after warmup)
-/// @param data full data vec, has to have length of at least `period`, only the tail gets touched
-/// @param period lookback length
-std::vector<float> returnSimpleMovingAverage(const std::vector<float>& data, int period) {
-    std::vector<float> requiredChunk(data.end() - (period*2), data.end());
-    std::vector<float> avgOverTime;
+    /// @brief rolling moving average over the tail end of `data`, uses the last
+    /// period*2 values so you get `period` output points (one per point after warmup)
+    /// `data` needs a length of at least period*2, only the tail gets touched
+    /// @param period lookback length
+    std::vector<float> returnRollingMovingAverage(int period) {
+        std::vector<float> requiredChunk(data.end() - (period*2), data.end());
+        std::vector<float> avgOverTime;
 
-    float sum = 0;
-    for (int i = 0; i < requiredChunk.size(); i++) {
-        sum += requiredChunk[i];
-        if (i >= period) {
-            sum -= requiredChunk[i - period];
-            avgOverTime.push_back(sum / static_cast<float>(period));
+        float sum = 0;
+        for (int i = 0; i < requiredChunk.size(); i++) {
+            sum += requiredChunk[i];
+            if (i >= period) {
+                sum -= requiredChunk[i - period];
+                avgOverTime.push_back(sum / static_cast<float>(period));
+            }
         }
-    }
-    return avgOverTime;
-}
-
-// Convention note: SMA Formula is worded around `data` whilst the EMA formula is worded
-//                  around `price`, this is intentional and because SMAs are useful for data
-//                  unrelated to actual price. 
-
-/// @brief exponential moving average, same tail-slice convention as the SMA
-/// seeds with a simple average of the first `period` values, then applies the
-/// standard EMA formula from there
-/// @param prices full price vec
-/// @param period lookback / smoothing length
-std::vector<float> returnExponentialMovingAverage(const std::vector<float>& prices, int period) {
-    std::vector<float> requiredChunk(prices.end() - (period*2), prices.end());
-    std::vector<float> emaOverTime;
-
-    float multiplier = 2.0f / static_cast<float>(period + 1);
-
-    float seed = 0;
-    for (int i = 0; i < period; i++) { seed += requiredChunk[i]; }
-    float ema = seed / static_cast<float>(period);
-
-    for (int i = period; i < requiredChunk.size(); i++) {
-        ema = (requiredChunk[i] - ema) * multiplier + ema;
-        emaOverTime.push_back(ema);
+        return avgOverTime;
     }
 
-    return emaOverTime;
-}
+    /// @brief population standard deviation over the whole set, one scalar
+    /// use returnRollingStandardDeviation if you want a value per point instead
+    float returnStandardDeviation() {
+        if (data.size() < 2) return 0.f;
 
-/// @brief builds a volume profile from `anchor` forward, groups volume by price
-/// level so you can see where the most trading happened
-/// @param anchor   starting index inside `prices` (everything before is ignored)
-/// @param prices   the price vec to scan
-/// @param volumeData per-bar volume, same length as prices
-/// @return [[price, volume], [price, volume], ...] feed this into returnValueArea
-std::vector<std::vector<float>> returnVolumeProfile(int anchor, std::vector<float>& prices,
-    std::vector<float> volumeData) { // anchor idx inside of the prices vec that gets passed
+        double sum = 0.0;
+        for (float v : data) sum += v;
+        double mean = sum / static_cast<double>(data.size());
 
-    std::unordered_map<float, float> map;
-    for (int i=anchor; i<(int)prices.size(); i++) map[prices[i]] += volumeData[i];
-    std::vector<std::vector<float>> passedPrices;
-    passedPrices.reserve(map.size());
-    for (auto& [px, vol] : map) passedPrices.push_back({px, vol});
-    return passedPrices;
-} 
+        double sqDiff = 0.0;
+        for (float v : data) { double d = v - mean; sqDiff += d * d; }
 
-/// @brief returns {VAL, VAH}, the price range containing 70% of total volume,
-/// expanding outward from the POC (highest-volume price level)
-/// @param volumeProfile output of returnVolumeProfile: [[price, volume], ...]
-/// @param pct           fraction of total volume to capture (default 0.70)
-/// @return {VAL, VAH} price pair, or {0,0} if the profile is empty
-std::vector<float> returnValueArea(std::vector<std::vector<float>> volumeProfile, float pct = 0.70f) {
-    if (volumeProfile.empty()) return {0.f, 0.f};
-
-    // Sort by price ascending so we can walk outward by index
-    std::sort(volumeProfile.begin(), volumeProfile.end(),
-        [](const std::vector<float>& a, const std::vector<float>& b) { return a[0] < b[0]; });
-
-    // Total volume + find POC (index of highest-volume level)
-    float totalVol = 0.f;
-    int pocIdx = 0;
-    for (int i = 0; i < (int)volumeProfile.size(); i++) {
-        totalVol += volumeProfile[i][1];
-        if (volumeProfile[i][1] > volumeProfile[pocIdx][1]) pocIdx = i;
+        return static_cast<float>(std::sqrt(sqDiff / static_cast<double>(data.size())));
     }
 
-    float targetVol = totalVol * pct;
-    float captured = volumeProfile[pocIdx][1];
-    int lo = pocIdx;
-    int hi = pocIdx;
+    /// @brief rolling population standard deviation, same tail-slice convention as
+    /// returnRollingMovingAverage so the outputs line up index for index with it
+    /// accumulators are doubles since sumSq cancellation gets ugly on price-scale floats
+    /// @param period lookback length
+    std::vector<float> returnRollingStandardDeviation(int period) {
+        std::vector<float> requiredChunk(data.end() - (period*2), data.end());
+        std::vector<float> stdDevOverTime;
 
-    // Expand whichever side adds more volume until we hit the target
-    while (captured < targetVol && (lo > 0 || hi < (int)volumeProfile.size() - 1)) {
-        float volBelow = (lo > 0) ? volumeProfile[lo - 1][1] : 0.f;
-        float volAbove = (hi < (int)volumeProfile.size() - 1) ? volumeProfile[hi + 1][1] : 0.f;
+        double sum = 0.0, sumSq = 0.0;
+        for (int i = 0; i < requiredChunk.size(); i++) {
+            sum += requiredChunk[i];
+            sumSq += static_cast<double>(requiredChunk[i]) * requiredChunk[i];
+            if (i >= period) {
+                sum -= requiredChunk[i - period];
+                sumSq -= static_cast<double>(requiredChunk[i - period]) * requiredChunk[i - period];
 
-        if (lo <= 0) {
-            hi++; captured += volAbove;
-        } else if (hi >= (int)volumeProfile.size() - 1) {
-            lo--; captured += volBelow;
-        } else if (volBelow >= volAbove) {
-            lo--; captured += volBelow;
-        } else {
-            hi++; captured += volAbove;
+                double mean = sum / static_cast<double>(period);
+                double variance = sumSq / static_cast<double>(period) - mean * mean;
+                if (variance < 0.0) variance = 0.0; // fp noise on a flat window
+                stdDevOverTime.push_back(static_cast<float>(std::sqrt(variance)));
+            }
         }
+        return stdDevOverTime;
     }
 
-    return {volumeProfile[lo][0], volumeProfile[hi][0]};
-}
+    /// @brief rolling z-score, how many standard deviations each value sits from
+    /// the mean of its own trailing window, same tail-slice convention as the others
+    /// a flat window (zero stddev) yields 0 rather than a div by zero
+    /// @param period lookback length
+    std::vector<float> returnRollingZScore(int period) {
+        std::vector<float> requiredChunk(data.end() - (period*2), data.end());
+        std::vector<float> zOverTime;
 
-/// @brief anchored volume-weighted average price, running/cumulative from
-/// `anchor` forward so vwap[i] reflects every bar from anchor through i,
-/// one output value per bar in that range (parallel to prices[anchor..])
-/// @param anchor starting index inside `prices` (everything before is ignored)
-/// @param prices price vec to scan
-/// @param volumeData per-bar volume, same length as prices
-/// @return running VWAP, one value per bar from anchor to the end of prices
-std::vector<float> returnVWAP(int anchor, const std::vector<float>& prices, const std::vector<float>& volumeData) {
-    std::vector<float> vwap;
-    if (anchor < 0 || anchor >= (int)prices.size()) return vwap;
-    vwap.reserve(prices.size() - anchor);
+        double sum = 0.0, sumSq = 0.0;
+        for (int i = 0; i < requiredChunk.size(); i++) {
+            sum += requiredChunk[i];
+            sumSq += static_cast<double>(requiredChunk[i]) * requiredChunk[i];
+            if (i >= period) {
+                sum -= requiredChunk[i - period];
+                sumSq -= static_cast<double>(requiredChunk[i - period]) * requiredChunk[i - period];
 
-    double sumPV = 0.0, sumV = 0.0;
-    for (int i = anchor; i < (int)prices.size(); i++) {
-        sumPV += (double)prices[i] * volumeData[i];
-        sumV += volumeData[i];
-        vwap.push_back(sumV > 0.0 ? static_cast<float>(sumPV / sumV) : prices[i]);
+                double mean = sum / static_cast<double>(period);
+                double variance = sumSq / static_cast<double>(period) - mean * mean;
+                if (variance < 0.0) variance = 0.0;
+                double stdDev = std::sqrt(variance);
+
+                zOverTime.push_back(stdDev > 0.0
+                    ? static_cast<float>((requiredChunk[i] - mean) / stdDev)
+                    : 0.f);
+            }
+        }
+        return zOverTime;
     }
-    return vwap;
-}
+};
 
-// ---- STATISTICS START ---- //
+class PriceAnalytics {
+private:
+    std::vector<float> prices;
+    std::vector<float> volume;
 
+public:
+    PriceAnalytics(std::vector<float> prices={}, std::vector<float> volume={}) : prices(prices), volume(volume) {}
+
+    std::vector<float> returnSimpleMovingAverage(int period) { // "upstream" definition of returnRollingMovingAverage
+        SetAnalytics sa(prices); // stack object, dies with the scope, nothing to free
+        return sa.returnRollingMovingAverage(period);
+    }
+
+    /// @brief exponential moving average, same tail-slice convention as the SMA
+    /// seeds with a simple average of the first `period` values, then applies the
+    /// standard EMA formula from there
+    /// @param period lookback / smoothing length
+    std::vector<float> returnExponentialMovingAverage(int period) {
+        std::vector<float> requiredChunk(prices.end() - (period*2), prices.end());
+        std::vector<float> emaOverTime;
+
+        float multiplier = 2.0f / static_cast<float>(period + 1);
+
+        float seed = 0;
+        for (int i = 0; i < period; i++) { seed += requiredChunk[i]; }
+        float ema = seed / static_cast<float>(period);
+
+        for (int i = period; i < requiredChunk.size(); i++) {
+            ema = (requiredChunk[i] - ema) * multiplier + ema;
+            emaOverTime.push_back(ema);
+        }
+
+        return emaOverTime;
+    }
+
+    /// @brief builds a volume profile from `anchor` forward, groups volume by price
+    /// level so you can see where the most trading happened
+    /// @param anchor   starting index inside `prices` (everything before is ignored)
+    /// @param prices   the price vec to scan
+    /// @param volumeData per-bar volume, same length as prices
+    /// @return [[price, volume], [price, volume], ...] feed this into returnValueArea
+    std::vector<std::vector<float>> returnVolumeProfile(int anchor) { // anchor idx inside of the prices vec that gets passed
+        std::unordered_map<float, float> map;
+        for (int i=anchor; i<(int)prices.size(); i++) map[prices[i]] += volume[i];
+        std::vector<std::vector<float>> passedPrices;
+        passedPrices.reserve(map.size());
+        for (auto& [px, vol] : map) passedPrices.push_back({px, vol});
+        return passedPrices;
+    } 
+
+    /// @brief returns {VAL, VAH}, the price range containing 70% of total volume,
+    /// expanding outward from the POC (highest-volume price level)
+    /// @param volumeProfile output of returnVolumeProfile: [[price, volume], ...]
+    /// @param pct           fraction of total volume to capture (default 0.70)
+    /// @return {VAL, VAH} price pair, or {0,0} if the profile is empty
+    std::vector<float> returnValueArea(std::vector<std::vector<float>> volumeProfile, float pct = 0.70f) {
+        if (volumeProfile.empty()) return {0.f, 0.f};
+
+        // Sort by price ascending so we can walk outward by index
+        std::sort(volumeProfile.begin(), volumeProfile.end(),
+            [](const std::vector<float>& a, const std::vector<float>& b) { return a[0] < b[0]; });
+
+        // Total volume + find POC (index of highest-volume level)
+        float totalVol = 0.f;
+        int pocIdx = 0;
+        for (int i = 0; i < (int)volumeProfile.size(); i++) {
+            totalVol += volumeProfile[i][1];
+            if (volumeProfile[i][1] > volumeProfile[pocIdx][1]) pocIdx = i;
+        }
+
+        float targetVol = totalVol * pct;
+        float captured = volumeProfile[pocIdx][1];
+        int lo = pocIdx;
+        int hi = pocIdx;
+
+        // Expand whichever side adds more volume until we hit the target
+        while (captured < targetVol && (lo > 0 || hi < (int)volumeProfile.size() - 1)) {
+            float volBelow = (lo > 0) ? volumeProfile[lo - 1][1] : 0.f;
+            float volAbove = (hi < (int)volumeProfile.size() - 1) ? volumeProfile[hi + 1][1] : 0.f;
+
+            if (lo <= 0) {
+                hi++; captured += volAbove;
+            } else if (hi >= (int)volumeProfile.size() - 1) {
+                lo--; captured += volBelow;
+            } else if (volBelow >= volAbove) {
+                lo--; captured += volBelow;
+            } else {
+                hi++; captured += volAbove;
+            }
+        }
+
+        return {volumeProfile[lo][0], volumeProfile[hi][0]};
+    }
+
+    /// @brief anchored volume-weighted average price, running/cumulative from
+    /// `anchor` forward so vwap[i] reflects every bar from anchor through i,
+    /// one output value per bar in that range (parallel to prices[anchor..])
+    /// @param anchor starting index inside `prices` (everything before is ignored)
+    /// @return running VWAP, one value per bar from anchor to the end of prices
+    std::vector<float> returnVWAP(int anchor) {
+        std::vector<float> vwap;
+        if (anchor < 0 || anchor >= (int)prices.size()) return vwap;
+        vwap.reserve(prices.size() - anchor);
+
+        double sumPV = 0.0, sumV = 0.0;
+        for (int i = anchor; i < (int)prices.size(); i++) {
+            sumPV += (double)prices[i] * volume[i];
+            sumV += volume[i];
+            vwap.push_back(sumV > 0.0 ? static_cast<float>(sumPV / sumV) : prices[i]);
+        }
+        return vwap;
+    }
+};
+
+// TODO - Use an OOP approach for this, as done above
 
 /// @brief fraction of trades that were winners (0.0-1.0), returns 0 if no trades
 float returnWinrate() {
@@ -607,12 +686,6 @@ float returnTradesPerDay() {
     return (float)trades.size() / days;
 }
 
-
-// ---- STATISTICS END ---- //
-
-
-// ---- MONTE CARLO START ---- //
-
 // mc stuff only for equity curve, uses stationary bootstrap (Politis & Romano 1994)
 
 /// @brief stationary bootstrap MC, resamples blocks of consecutive trades with
@@ -706,6 +779,5 @@ std::vector<std::vector<float>> returnPercentilePaths(
 }
 
 
-// ---- MONTE CARLO END ---- //
 
 
