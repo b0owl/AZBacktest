@@ -29,8 +29,10 @@ int main() {
 
         if ((int)engine.prices.size() < (longPeriod * 2)) continue;
 
-        float shortMaVal = returnSimpleMovingAverage(engine.prices, shortPeriod).back();
-        float longMaVal  = returnSimpleMovingAverage(engine.prices, longPeriod).back();
+        // one PriceAnalytics per batch, it snapshots the prices it was handed
+        PriceAnalytics pa(engine.prices);
+        float shortMaVal = pa.returnSimpleMovingAverage(shortPeriod).back();
+        float longMaVal  = pa.returnSimpleMovingAverage(longPeriod).back();
 
         bool shortAboveLong = shortMaVal > longMaVal;
         bool shortBelowLong = shortMaVal < longMaVal;
