@@ -30,8 +30,7 @@ int main() {
     const int warmupSecs = 900;
 
     // daily state
-    std::vector<float> dailyPrices;
-    std::vector<float> dailyVolume;
+    PriceAnalytics pa;
     int currentDay = -1;
     float val = 0.f, vah = 0.f;
     float targetMid = 0.f; // snapshot mid at entry so shifting VA doesnt inflate PnL
@@ -78,14 +77,12 @@ int main() {
             int day = (int)(epochSec / 86400);
             if (day != currentDay) {
                 currentDay = day;
-                dailyPrices.clear();
-                dailyVolume.clear();
+                pa = PriceAnalytics();
                 val = vah = 0.f;
                 barsSinceProfile = 0;
             }
 
-            dailyPrices.push_back(px);
-            dailyVolume.push_back(volumes[b]);
+            pa.updatePrices(px, volumes[b]);
 
             if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << engine.handler.eof << std::endl; }
 
@@ -93,8 +90,6 @@ int main() {
 
             barsSinceProfile++;
             if (barsSinceProfile >= 50 || val == 0.f) {
-                // rebuilt each time so it picks up the bars added since the last profile
-                PriceAnalytics pa(dailyPrices, dailyVolume);
                 auto profile = pa.returnVolumeProfile(0);
                 if (!profile.empty()) {
                     auto va = pa.returnValueArea(profile);

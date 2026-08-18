@@ -14,6 +14,7 @@
 
 #include <vector>
 #include <fstream>
+
 #include <string>
 #include <charconv>
 #include <cmath>
@@ -318,6 +319,10 @@ private:
 public:
     SetAnalytics(std::vector<float> data) : data(data) {}
 
+
+    void updateVector(float newData) { data.push_back(newData); }
+    void clearOutVector(int maxSize) { if (data.size() > maxSize) data.erase(data.begin()); }
+
     /// @brief rolling moving average over the tail end of `data`, uses the last
     /// period*2 values so you get `period` output points (one per point after warmup)
     /// `data` needs a length of at least period*2, only the tail gets touched
@@ -414,6 +419,11 @@ private:
 
 public:
     PriceAnalytics(std::vector<float> prices={}, std::vector<float> volume={}) : prices(prices), volume(volume) {}
+
+    void updatePrices(float price, float vol = 0.f) { prices.push_back(price); volume.push_back(vol); }
+    void trimPrices(int maxSize) {
+        if ((int)prices.size() > maxSize) { prices.erase(prices.begin()); volume.erase(volume.begin()); }
+    }
 
     std::vector<float> returnSimpleMovingAverage(int period) { // "upstream" definition of returnRollingMovingAverage
         SetAnalytics sa(prices); // stack object, dies with the scope, nothing to free
