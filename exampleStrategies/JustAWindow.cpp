@@ -1,5 +1,4 @@
-// this isnt a strategy
-// its just a window (as the name implies) for style-dev purposes 
+// not a strategy, just a window for style-dev purposes
 // also good for understanding the gui api
 
 #include <iostream>
@@ -17,7 +16,10 @@ int main() {
         {"Line demo", "Bar demo"},
         {0, 1}
     );
-    addSeries("Series Explorer demo", std::vector<std::vector<float>>{{1,2,3,4},{7,5,4,9}}, {"Cool Custom Name 1", "Cool Custom Name 2"}); // initSeriesPool only supports 1d
+
+    addSeries("Series Explorer demo",
+        std::vector<std::vector<float>>{{1,2,3,4},{7,5,4,9}},
+        {"Cool Custom Name 1", "Cool Custom Name 2"});
 
     addHeatmap("heatmap demo", std::vector<float>{
         1, 2, 3, 4, 5,
@@ -26,11 +28,13 @@ int main() {
         16, 17, 18, 19, 20
     }, 4, 5);
 
-    addScatter("scatter demo", std::vector<float>{3,1,4,1,5,9,2,6,5,3}, seriesPool::RGBA{0.2f, 0.7f, 0.9f, 1.f});
+    addScatter("scatter demo",
+        std::vector<float>{3,1,4,1,5,9,2,6,5,3},
+        seriesPool::RGBA{0.2f, 0.7f, 0.9f, 1.f});
 
     addErrorBars("error bars demo",
-        std::vector<float>{2, 4, 3, 5, 4, 6, 5},        // values
-        std::vector<float>{0.5f, 0.8f, 0.3f, 1.0f, 0.6f, 0.4f, 0.7f},  // errors
+        std::vector<float>{2, 4, 3, 5, 4, 6, 5},
+        std::vector<float>{0.5f, 0.8f, 0.3f, 1.0f, 0.6f, 0.4f, 0.7f},
         seriesPool::RGBA{0.9f, 0.4f, 0.3f, 1.f});
 
     addStat("bananas per second", 42.0f);

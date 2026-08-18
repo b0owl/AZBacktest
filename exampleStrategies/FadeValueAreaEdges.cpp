@@ -8,7 +8,6 @@
 // builds a daily volume profile from the current day's RTH bars
 // waits 15 minutes into RTH before trading
 
-
 #include <iostream>
 #include <vector>
 
@@ -29,8 +28,8 @@ int main() {
     float stopLoss   = 50.f;
 
     // RTH window in seconds-since-midnight UTC
-    const int rthOpen  = 13*3600 + 30*60;
-    const int rthClose = 20*3600;
+    const int rthOpen  = 13 * 3600 + 30 * 60;
+    const int rthClose = 20 * 3600;
     const int warmupSecs = 900;
 
     // daily state
@@ -38,28 +37,24 @@ int main() {
     std::vector<float> dailyVolume;
     int currentDay = -1;
     float val = 0.f, vah = 0.f;
-    float targetMid = 0.f; // snapshot mid at entry so shifting VA doesnt inflate PnL
+    float targetMid = 0.f;
     int barsSinceProfile = 0;
 
     int batchSize = 500;
-    int i = 0;
     long long prevEpoch = 0;
-    while (true) {
+    for (int i = 0; ++i;) {
         auto window = handler.requestDataWindow(md, batchSize, 30);
         if (window.prices.empty()) break;
         prices = std::move(window.prices);
         auto& volumes = window.volumes;
 
         for (int b = 0; b < (int)prices.size(); b++) {
-            i++;
             float px = prices[b];
             long long epochSec = handler.windowTimestamps[b];
 
-            // skip bars that span data gaps, not real 30s bars
+            // skip bars that span data gaps
             if (prevEpoch > 0 && (epochSec - prevEpoch) > 120) {
-                if (handler.openTrade) {
-                    handler.closeTrade();
-                }
+                if (handler.openTrade) handler.closeTrade();
                 prevEpoch = epochSec;
                 continue;
             }
@@ -67,6 +62,7 @@ int main() {
 
             int tod = (int)(epochSec % 86400);
 
+            // close any open trade outside RTH
             if (tod < rthOpen || tod >= rthClose) {
                 if (handler.openTrade) {
                     float saved = prices.back();
@@ -97,9 +93,10 @@ int main() {
 
             barsSinceProfile++;
             if (barsSinceProfile >= 50 || val == 0.f) {
-                auto profile = returnVolumeProfile(0, dailyPrices, dailyVolume);
+                PriceAnalytics pa(dailyPrices, dailyVolume);
+                auto profile = pa.returnVolumeProfile(0);
                 if (!profile.empty()) {
-                    auto va = returnValueArea(profile);
+                    auto va = pa.returnValueArea(profile);
                     val = va[0]; vah = va[1];
                 }
                 barsSinceProfile = 0;
@@ -126,7 +123,8 @@ int main() {
 
             prices.back() = saved;
         }
-    } handler.closeAll();
+    }
+    handler.closeAll();
 
     // monte carlo (daily bucketed)
     int mcSims = 60;
@@ -146,6 +144,6 @@ int main() {
               << "You can change the theme by calling showConsole with the appropriate function type "
                  "(see the bottom of any example file); all normal ImGUI attributes are customizeable.\n";
 
-    showConsole("Console", skins::light);
-    // showConsole("Console", skins::dark);
+    showConsole("Console", skins::dark);
+    // showConsole("Console", skins::light);
 }

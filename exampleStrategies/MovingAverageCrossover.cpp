@@ -20,40 +20,37 @@ int main() {
     float takeProfit = 500.f;
     float stopLoss   = 50.f;
 
-    std::cout << "Fetching EOF..." << std::endl;
     handler.fetchEOF(60);
-    std::cout << "EOF Found, continuing..." << std::endl;
 
     int batchSize = 500;
-    int i = 0;
-    while (true) {
+    for (int i = 0; ++i;) {
         auto window = handler.requestDataWindow(md, batchSize, 60);
         if (window.prices.empty()) break;
         prices = std::move(window.prices);
 
         if ((int)prices.size() < (longPeriod * 2)) continue;
 
-        float shortMaVal = returnSimpleMovingAverage(prices, shortPeriod).back();
-        float longMaVal  = returnSimpleMovingAverage(prices, longPeriod).back();
+        PriceAnalytics pa(prices);
+        float shortMaVal = pa.returnSimpleMovingAverage(shortPeriod).back();
+        float longMaVal  = pa.returnSimpleMovingAverage(longPeriod).back();
 
         bool shortAboveLong = shortMaVal > longMaVal;
         bool shortBelowLong = shortMaVal < longMaVal;
 
         for (int b = 0; b < (int)prices.size(); b++) {
-            i++;
             if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << handler.eof << std::endl; }
 
             float saved = prices.back();
             prices.back() = prices[b];
             handler.tick();
 
-            // tp/sl handling
+            // tp/sl
             if (handler.openTrade) {
                 float pnl = handler.openTrade->td.profit;
                 if (pnl >= takeProfit || pnl <= -stopLoss) handler.closeTrade();
             }
 
-            // exits first so we can immediately flip into the opposite side on the same bar
+            // exits first so we can immediately flip into the opposite side
             if (handler.inLong && shortBelowLong)  handler.closeTrade();
             if (handler.inShort && shortAboveLong) handler.closeTrade();
 
@@ -63,7 +60,8 @@ int main() {
 
             prices.back() = saved;
         }
-    } handler.closeAll();
+    }
+    handler.closeAll();
 
     // monte carlo (daily bucketed)
     int mcSims = 60;

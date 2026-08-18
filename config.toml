@@ -1,18 +1,13 @@
-# AZBacktest configuration
 # edit this file to map your CSV/Parquet columns and set the data path
-
 # absolute path to the data file (CSV or Parquet)
 # use an absolute path so it resolves correctly regardless of working directory
-path = "C:/path/to/your/data.csv"
-
+path = "/path/to/your/data.parquet"
 # column indices (0-indexed)
 timestampCol = 0
-priceCol     = 8
-sizeCol      = 9
-
+priceCol     = 1
+sizeCol      = 2
 # set to true if the CSV has a header row to skip
 skipHeader = true
-
 # substring offsets for pulling Y/M/D out of the timestamp column
 # defaults match Databento's ISO-8601 format: 2025-06-01T22:00:00.065308005Z
 [dateFormat]
@@ -22,20 +17,17 @@ monthOffset = 5
 monthLength = 2
 dayOffset   = 8
 dayLength   = 2
-
 # symbol filtering (set symbolCol to -1 to disable)
 # if the CSV has multiple symbols interleaved, these filter to one
 symbolCol  = -1
 symbol     = ""
 symbolRoll = false    # treat symbol as a prefix and auto-roll contracts
-
 # aggressor/side classification (set aggressor to -1 to disable)
 # column that tells you which side initiated the trade
 aggressor                = -1
 buySideAggressorAlias    = "B"     # CSV value meaning "buy aggressor / lifted the ask"
 sellSideAggressorAlias   = "S"     # CSV value meaning "sell aggressor / hit the bid"
 unknownSideAggressorAlias = "N"    # fallback when side doesnt match either alias
-
 # trading costs (all in pts)
 commission = 0.0
 spread     = 0.0
