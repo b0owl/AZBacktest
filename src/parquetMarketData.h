@@ -128,7 +128,11 @@ private:
     // _MarketData::_nextMatchingLine but over Parquet rows; leaves _absoluteRow
     // pointing AT the next matching row (not yet consumed) on success
     bool advanceToNextMatch() {
-        if (kCSVMapping.symbolCol < 0) return _absoluteRow < _totalRows;
+        if (kCSVMapping.symbolCol < 0) {
+            if (_absoluteRow >= _totalRows) return false;
+            ensureRowLoaded(_absoluteRow);
+            return true;
+        }
 
         std::string_view root(kCSVMapping.symbol);
         while (_absoluteRow < _totalRows) {

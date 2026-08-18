@@ -16,20 +16,16 @@ int main() {
     float takeProfit = 500.f;
     float stopLoss   = 50.f;
 
-    std::cout << "Fetching EOF..." << std::endl;
     engine.handler.fetchEOF(60);
-    std::cout << "EOF Found, continuing..." << std::endl;
 
     int batchSize = 500;
-    int i = 0;
-    while (true) {
+    for (int i = 0; ++i;) {
         auto window = engine.handler.requestDataWindow(engine.md, batchSize, 60);
         if (window.prices.empty()) break;
         engine.prices = std::move(window.prices);
 
         if ((int)engine.prices.size() < (longPeriod * 2)) continue;
 
-        // one PriceAnalytics per batch, it snapshots the prices it was handed
         PriceAnalytics pa(engine.prices);
         float shortMaVal = pa.returnSimpleMovingAverage(shortPeriod).back();
         float longMaVal  = pa.returnSimpleMovingAverage(longPeriod).back();
@@ -38,20 +34,19 @@ int main() {
         bool shortBelowLong = shortMaVal < longMaVal;
 
         for (int b = 0; b < (int)engine.prices.size(); b++) {
-            i++;
             if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << engine.handler.eof << std::endl; }
 
             float saved = engine.prices.back();
             engine.prices.back() = engine.prices[b];
             engine.handler.tick();
 
-            // tp/sl handling
+            // tp/sl
             if (engine.handler.openTrade) {
                 float pnl = engine.handler.openTrade->td.profit;
                 if (pnl >= takeProfit || pnl <= -stopLoss) engine.handler.closeTrade();
             }
 
-            // exits first so we can immediately flip into the opposite side on the same bar
+            // exits first so we can immediately flip into the opposite side
             if (engine.handler.inLong && shortBelowLong)  engine.handler.closeTrade();
             if (engine.handler.inShort && shortAboveLong) engine.handler.closeTrade();
 
@@ -61,7 +56,8 @@ int main() {
 
             engine.prices.back() = saved;
         }
-    } engine.handler.closeAll();
+    }
+    engine.handler.closeAll();
 
     // monte carlo (daily bucketed)
     int mcSims = 60;
