@@ -87,6 +87,7 @@ struct Series {
     int heatmapCols = 0;       ///< heatmap col count (type 2 only)
     seriesPool::HeatmapAxes heatmapAxes; ///< optional row/column labelling (Heatmap kind only)
     std::vector<float> errors; ///< per-point error magnitude (ErrorBar kind only)
+    float lineWidth = -1.f;    ///< line thickness in px, <=0 = let ImPlot pick (appended at the end so existing positional {...} initializers above stay valid)
 
     // provenance, used to persist + restore this child from the .ini: which pool
     // series it was pulled from (empty = raw data added via newLine/BarSeries,
