@@ -46,6 +46,7 @@ struct NamedSeries {
     int heatmapCols = 0;                        ///< heatmap col count (type 2 only)
     HeatmapAxes heatmapAxes;                    ///< optional row/column labelling (type 2 only)
     std::vector<float> errors;                  ///< per-point error magnitude (type 4 only)
+    float lineWidth = -1.f;                     ///< line thickness in px, <=0 = let ImPlot pick (appended at the end so existing positional {...} initializers above stay valid)
 
     int cols() const { return (int)data.size(); }       ///< number of columns (1 for a simple series)
     int rows() const { return data.empty() ? 0 : (int)data[0].size(); } ///< number of data points per column
@@ -75,10 +76,13 @@ inline NamedSeries* findSeries(const std::string& name) {
 /// @param values the data, any arithmetic type gets converted to float
 /// @param type  0 = line, 1 = bar
 /// @param onY2  default axis when this series gets added to a panel, true = right (Y2)
+/// @param lineWidth line thickness in px when plotted as a Line, <=0 = let ImPlot pick
 template<typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
-void addSeries(std::string name, std::vector<T> values, int type = 0, RGBA color = {}, bool onY2 = false) {
+void addSeries(std::string name, std::vector<T> values, int type = 0, RGBA color = {}, bool onY2 = false, float lineWidth = -1.f) {
     std::vector<float> col(values.begin(), values.end());
-    pool.push_back({std::move(name), {std::move(col)}, {}, type, color, onY2});
+    NamedSeries s{std::move(name), {std::move(col)}, {}, type, color, onY2};
+    s.lineWidth = lineWidth;
+    pool.push_back(std::move(s));
 }
 
 /// @brief add a 2D series (multiple columns) to the pool

@@ -23,6 +23,7 @@ inline Series buildColumnChild(seriesPool::NamedSeries& s, int col, bool onY2) {
     if (hide) label = "##" + s.name + "_" + std::to_string(col);
     SeriesKind kind = s.type == 4 ? ErrorBar : s.type == 3 ? Scatter : s.type == 2 ? Heatmap : (s.type == 1 ? Bar : Line);
     Series c{kind, label, s.data[col], false, s.color, hide, onY2};
+    c.lineWidth = s.lineWidth;
     c.heatmapRows = s.heatmapRows;
     c.heatmapCols = s.heatmapCols;
     c.heatmapAxes = s.heatmapAxes;
@@ -145,11 +146,13 @@ inline void renderPanels() {
 
                 for (auto& c : p.children) {
                     if (c.unbound || c.kind == Heatmap) continue;
-                    if (c.color.isSet()) {
-                        ImVec4 cv(c.color.r, c.color.g, c.color.b, c.color.a);
-                        ImPlot::SetNextLineStyle(cv);
-                        ImPlot::SetNextFillStyle(cv);
-                        ImPlot::SetNextMarkerStyle(IMPLOT_AUTO, IMPLOT_AUTO, cv);
+                    {
+                        ImVec4 cv = c.color.isSet() ? ImVec4(c.color.r, c.color.g, c.color.b, c.color.a) : IMPLOT_AUTO_COL;
+                        ImPlot::SetNextLineStyle(cv, c.lineWidth > 0.f ? c.lineWidth : IMPLOT_AUTO);
+                        if (c.color.isSet()) {
+                            ImPlot::SetNextFillStyle(cv);
+                            ImPlot::SetNextMarkerStyle(IMPLOT_AUTO, IMPLOT_AUTO, cv);
+                        }
                     }
                     ImPlot::SetAxes(ImAxis_X1, c.onY2 ? ImAxis_Y2 : ImAxis_Y1);
                     if (c.kind == Scatter)
