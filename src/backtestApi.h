@@ -293,6 +293,38 @@ public:
     void fetchEOF(int timeframe=1, int strideIncrement=2) {
         eof = findEof(kCSVMapping.path, timeframe, strideIncrement);
     }
+
+    /// @brief raw value at [row, col] straight from the CSV, an escape hatch for
+    /// any column dataConfig.h doesn't map to a named field (nextTick/nextClose
+    /// only ever parse timestamp/price/size/aggressor). row is 0-indexed and
+    /// counts data rows after the header, same counting fetchEOF's `eof` uses;
+    /// col is the 0-indexed comma-separated field. Returns "" if either index
+    /// is out of range
+    /// @param row 0-indexed data row (header doesn't count)
+    /// @param col 0-indexed column
+    std::string getValue(int row, int col) {
+        if (row < 0 || col < 0) return "";
+        if (isParquetPath(kCSVMapping.path))
+            throw std::runtime_error("getValue: raw cell access isn't supported for Parquet sources");
+
+        std::ifstream file(kCSVMapping.path);
+        if (!file) throw std::runtime_error(std::string("getValue: failed to open ") + kCSVMapping.path);
+
+        std::string line;
+        std::getline(file, line); // header
+        for (int i = 0; i <= row; i++) {
+            if (!std::getline(file, line)) return "";
+        }
+
+        std::size_t start = 0;
+        for (int i = 0; i < col; i++) {
+            start = line.find(',', start);
+            if (start == std::string::npos) return "";
+            start++;
+        }
+        std::size_t stop = line.find(',', start);
+        return line.substr(start, stop == std::string::npos ? std::string::npos : stop - start);
+    }
 };
 
 /// @brief config function, makes setting up cleaner
