@@ -49,6 +49,12 @@ struct CSVMapping {
     const char* sellSideAggressorAlias;              // CSV value meaning "sell aggressor / hit the bid"
     const char* unknownSideAggressorAlias;           // fallback when the side column doesnt match either alias
 
+    // resting (top-of-book) size columns, a per-row snapshot of what's sitting
+    // on each side of the book rather than volume that actually traded
+    // defaulted off (-1) so configs that dont set them still work
+    int restingBidCol;                               // column index of the resting bid size, -1 to disable
+    int restingAskCol;                               // column index of the resting ask size, -1 to disable
+
     float commision;                                 // commision, pts
     float spread;                                    // spread, pts
     float timingCost;                                // how much do you lose from latency? (pts)
@@ -71,6 +77,7 @@ inline CSVMapping kCSVMapping{
     true,                      // skipHeader
     -1, "", false,             // symbol filtering disabled
     -1, "B", "S", "N",        // aggressor disabled, default aliases
+    -1, -1,                    // resting bid/ask columns disabled
     0.f, 0.f, 0.f             // costs
 };
 
@@ -101,6 +108,11 @@ aggressor                = -1
 buySideAggressorAlias    = "B"
 sellSideAggressorAlias   = "S"
 unknownSideAggressorAlias = "N"
+
+# resting (top-of-book) size columns, set to -1 to disable
+# these are book snapshots, not traded volume
+restingBidCol = -1
+restingAskCol = -1
 
 # trading costs (all in pts)
 commission = 0.0
@@ -162,6 +174,9 @@ inline void loadConfig(const char* tomlPath = "config.toml") {
     kCSVMapping.sellSideAggressorAlias = cfgDetail::sellSideStr.c_str();
     cfgDetail::unknownSideStr = toml::getString(cfg, "", "unknownSideAggressorAlias", "N");
     kCSVMapping.unknownSideAggressorAlias = cfgDetail::unknownSideStr.c_str();
+
+    kCSVMapping.restingBidCol = toml::getInt(cfg, "", "restingBidCol", -1);
+    kCSVMapping.restingAskCol = toml::getInt(cfg, "", "restingAskCol", -1);
 
     kCSVMapping.commision  = toml::getFloat(cfg, "", "commission", 0.f);
     kCSVMapping.spread     = toml::getFloat(cfg, "", "spread", 0.f);
