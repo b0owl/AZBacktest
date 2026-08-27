@@ -56,6 +56,9 @@ enum class TradeDirection { Long, Short };
 /// deltas[i] is executedBuys[i] minus executedSells[i] (orderflow delta)
 /// executedBuys[i] + executedSells[i] <= volumes[i], the remainder being volume
 /// whose aggressor side couldn't be classified
+/// restingBids/restingAsks are top-of-book size sitting unfilled rather than
+/// volume that traded, so they don't participate in that sum and aren't summed
+/// across a bar either, at timeframe>0 they're the closing tick's book snapshot
 /// every vector here is the same length and indexed the same way, so
 /// executedBuys[i] always belongs to prices[i]
 struct DataWindow {
@@ -64,6 +67,8 @@ struct DataWindow {
     std::vector<float> executedBuys;  // volume that lifted the ask (buy aggressor)
     std::vector<float> executedSells; // volume that hit the bid (sell aggressor)
     std::vector<float> deltas;
+    std::vector<float> restingBids;   // volume resting on the bid
+    std::vector<float> restingAsks;   // volume resting on the ask
 };
 
 class Trade {
@@ -216,31 +221,26 @@ public:
     int processedBars = 0;
     /// @brief pull `period` bars from the market data source, if timeframe is 0
     /// it reads raw ticks; otherwise it reads closes at that many seconds per bar.
-    /// returns parallel prices + volumes + executedBuys/executedSells + deltas,
-    /// callers usually std::move prices into their `Handling`-bound vector and
-    /// feed volumes into returnVolumeProfile
+    /// returns parallel prices + volumes + executedBuys/executedSells + deltas
+    /// + restingBids/restingAsks, callers usually std::move prices into their
+    /// `Handling`-bound vector and feed volumes into returnVolumeProfile
     /// @param md       the MarketData source to read from
     /// @param period   how many rows/bars to load
     /// @param timeframe 0 = tick-by-tick, >0 = close every N seconds
     /// @param tickRes  timeframe==0 only: 1 = full resolution, how many raw ticks
     /// get read (and discarded) between each kept tick, to downsample tick-by-tick data
-    DataWindow requestDataWindow(MarketData& md, int period, int timeframe=0, void (*whenUnknown)()=[](){},
-                                bool supressWarnings=false, int tickRes=1) {
-
-        if (!supressWarnings && tickRes != 1) {
-            std::cout << "Warning! If tickRes is above one, the discarded ticks' volume is dropped entirely," << std::endl;
-            std::cout << "so executedBuys/executedSells only cover the ticks that were kept" << std::endl;
-            std::cout << "Supress these warnings by calling with supressWarnings (the fifth argument) set to true" << std::endl;
-        }
-
+    DataWindow requestDataWindow(MarketData& md, int period, int timeframe=0, void (*whenUnknown)()=[](){}, int tickRes=1) {
         DataWindow out;
         out.prices.reserve(period);
         out.volumes.reserve(period);
         out.executedSells.reserve(period);
         out.executedBuys.reserve(period);
         out.deltas.reserve(period);
+        out.restingBids.reserve(period);
+        out.restingAsks.reserve(period);
         windowTimestamps.clear();
         windowTimestamps.reserve(period);
+
         if (timeframe==0) {
             for (int i=0; i<period; i++) {
                 std::optional<Tick> tick;
@@ -263,6 +263,11 @@ public:
                 if (tick->unknownVolume > 0.f) whenUnknown(); // custom behavior hook for
                                                              // unclassifiable volume
 
+                // book snapshot at this tick, 0 across the board when the resting
+                // columns aren't mapped in config.toml
+                out.restingBids.push_back(tick->restingBids);
+                out.restingAsks.push_back(tick->restingAsks);
+
                 processedBars++;
             }
         } else {
@@ -280,6 +285,10 @@ public:
                 out.executedBuys.push_back(bar->executedBuys);
                 out.executedSells.push_back(bar->executedSells);
                 if (bar->unknownVolume > 0.f) whenUnknown();
+
+                // closing tick's book, not a bar aggregate, see DataWindow
+                out.restingBids.push_back(bar->restingBids);
+                out.restingAsks.push_back(bar->restingAsks);
 
                 processedBars++;
             }

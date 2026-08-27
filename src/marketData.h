@@ -45,6 +45,12 @@
 /// buyer lifting the ask, sell-side volume is a seller hitting the bid. Rows
 /// whose side column matches neither alias (or when `aggressor` is -1 in the
 /// config) land in unknownVolume. The three always sum to `size`.
+///
+/// restingBids/restingAsks are the opposite kind of number: top-of-book size
+/// sitting unfilled on each side, read straight from restingBidCol/restingAskCol.
+/// They're snapshots, not flow, so unlike the volume splits they're never summed
+/// across a bar, nextClose reports the closing row's book the same way it reports
+/// that row's price. Both stay 0 when the columns aren't configured.
 struct Tick {
     std::string_view timestamp;
     std::string_view price;
@@ -53,6 +59,8 @@ struct Tick {
     float executedBuys   = 0.f;
     float executedSells  = 0.f;
     float unknownVolume  = 0.f;
+    float restingBids    = 0.f;
+    float restingAsks    = 0.f;
 };
 
 namespace mdDetail {
@@ -244,6 +252,45 @@ inline void fourFields(const char* start, const char* end, int c1, int c2, int c
     if (col == c4) f4 = std::string_view(fs, static_cast<size_t>(p - fs));
 }
 
+/// @brief general n-column single-pass extraction, out[i] gets the field at
+/// cols[i]. unlike the two/three/fourFields variants above it doesn't care what
+/// order cols is in (it stops at whichever index is largest, not the last one),
+/// and a negative cols[i] just leaves out[i] empty, which is what lets nextTick
+/// pass optional columns like the aggressor or resting sizes straight through
+/// @param cols n column indices, any order, negatives meaning "not configured"
+/// @param out  caller-owned array of n views, only the ones that matched get written
+inline void nFields(const char* start, const char* end, const int* cols, int n,
+                    std::string_view* out) {
+    int maxCol = -1;
+    for (int i = 0; i < n; ++i) if (cols[i] > maxCol) maxCol = cols[i];
+    if (maxCol < 0) return;
+
+    const char* p  = start;
+    const char* fs = start;
+    int col = 0;
+    while (p < end) {
+        if (*p == ',') {
+            for (int i = 0; i < n; ++i)
+                if (cols[i] == col) out[i] = std::string_view(fs, static_cast<size_t>(p - fs));
+            if (col == maxCol) return;
+            ++col;
+            fs = p + 1;
+        }
+        ++p;
+    }
+    // trailing field, no comma terminates it
+    for (int i = 0; i < n; ++i)
+        if (cols[i] == col) out[i] = std::string_view(fs, static_cast<size_t>(p - fs));
+}
+
+/// @brief parse a field into `dst`, leaving it untouched if the column wasn't
+/// configured or the row didn't have it. keeps the "0 when disabled" default
+/// that Tick's resting sizes rely on
+inline void parseOptionalFloat(std::string_view v, float& dst) {
+    if (v.empty()) return;
+    std::from_chars(v.data(), v.data() + v.size(), dst);
+}
+
 } // namespace mdDetail
 
 // Parquet-backed reader (_ParquetMarketData), compiled in only when build.sh
@@ -349,11 +396,21 @@ public:
         const char* eol = mdDetail::findEOL(line, _end);
         _cur = (eol < _end) ? eol + 1 : _end;
         Tick t;
-        std::string_view sideView, szView;
-        mdDetail::fourFields(line, eol,
-            kCSVMapping.timestampCol, kCSVMapping.aggressor, kCSVMapping.priceCol, kCSVMapping.sizeCol,
-            t.timestamp, sideView, t.price, szView);
+        // one pass over the row for every mapped column, the optional ones
+        // (aggressor, resting sizes) come back empty when their index is -1
+        const int cols[6] = { kCSVMapping.timestampCol, kCSVMapping.priceCol,
+                              kCSVMapping.aggressor,    kCSVMapping.sizeCol,
+                              kCSVMapping.restingBidCol, kCSVMapping.restingAskCol };
+        std::string_view f[6];
+        mdDetail::nFields(line, eol, cols, 6, f);
+
+        t.timestamp = f[0];
+        t.price     = f[1];
+        std::string_view sideView = f[2];
+        std::string_view szView   = f[3];
         std::from_chars(szView.data(), szView.data() + szView.size(), t.size);
+        mdDetail::parseOptionalFloat(f[4], t.restingBids);
+        mdDetail::parseOptionalFloat(f[5], t.restingAsks);
         if (kCSVMapping.aggressor >= 0 && sideView == kCSVMapping.buySideAggressorAlias) {
             t.side = kCSVMapping.buySideAggressorAlias;
             t.executedBuys = t.size;
@@ -370,7 +427,8 @@ public:
     /// t.size is the summed volume across every tick that fell inside the bar,
     /// split across t.executedBuys / t.executedSells / t.unknownVolume by the
     /// aggressor column. t.side is the side of the closing tick specifically
-    /// (same row the timestamp and price come from), not the bar as a whole
+    /// (same row the timestamp and price come from), not the bar as a whole,
+    /// and t.restingBids / t.restingAsks are that same closing row's book
     /// @return the close tick (views into the underlying buffer), or nullopt at EOF
     std::optional<Tick> nextClose(int seconds) {
         _skipHeaderOnce();
@@ -432,6 +490,14 @@ public:
         t.executedBuys  = buys;
         t.executedSells = sells;
         t.unknownVolume = unknown;
+        // resting sizes are book snapshots, summing them across the bar would be
+        // meaningless, so they come off the closing row like the price does
+        if (kCSVMapping.restingBidCol >= 0)
+            mdDetail::parseOptionalFloat(
+                mdDetail::field(lastLine, lastEol, kCSVMapping.restingBidCol), t.restingBids);
+        if (kCSVMapping.restingAskCol >= 0)
+            mdDetail::parseOptionalFloat(
+                mdDetail::field(lastLine, lastEol, kCSVMapping.restingAskCol), t.restingAsks);
         return t;
     }
 };
