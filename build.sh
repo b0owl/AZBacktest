@@ -4,6 +4,8 @@
 # Usage:
 #   build.sh -runfile <path>
 #     <path> is resolved relative to the current directory (where you invoked the script).
+#   build.sh -tests
+#     Build and run every tests/test_*.cpp, one binary each, and report a summary.
 #   build.sh -clean
 #     Sweep leftover .build_*.exe artifacts from interrupted runs across the project.
 #
@@ -21,11 +23,16 @@ INVOKE_DIR="$(pwd)"
 
 RUNFILE=""
 CLEAN=0
+TESTS=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -runfile)
             RUNFILE="$2"
             shift 2
+            ;;
+        -tests)
+            TESTS=1
+            shift
             ;;
         -clean)
             CLEAN=1
@@ -33,7 +40,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "unknown arg: $1" >&2
-            echo "usage: build.sh -runfile <path> | -clean" >&2
+            echo "usage: build.sh -runfile <path> | -tests | -clean" >&2
             exit 1
             ;;
     esac
@@ -44,9 +51,78 @@ if [[ $CLEAN -eq 1 ]]; then
     while IFS= read -r -d '' f; do
         rm -f "$f"
         count=$((count + 1))
-    done < <(find "$PROJECT_ROOT" -type f -name '.build_*.exe' -print0)
+    done < <(find "$PROJECT_ROOT" \( -name '.build_*.exe' -o -name '.azt_test_*.csv' \) -type f -print0)
     echo "removed $count build artifact(s)"
     exit 0
+fi
+
+# Build and run the unit tests. Each tests/test_*.cpp becomes its own binary
+# rather than one linked suite, because backtestApi.h declares `trades`,
+# `realizedProfit` and `equityCurve` as non-inline globals - two test TUs that
+# both include it would collide at link time. Separate binaries also keep the
+# global kCSVMapping from leaking between files.
+#
+# CSV-only: the fixtures are generated CSVs, so nothing here needs Arrow and the
+# Parquet backend isn't exercised.
+if [[ $TESTS -eq 1 ]]; then
+    TEST_DIR="$PROJECT_ROOT/tests"
+    if [[ ! -d "$TEST_DIR" ]]; then
+        echo "no tests/ directory at $TEST_DIR" >&2
+        exit 1
+    fi
+
+    shopt -s nullglob
+    TEST_FILES=("$TEST_DIR"/test_*.cpp)
+    shopt -u nullglob
+    if [[ ${#TEST_FILES[@]} -eq 0 ]]; then
+        echo "no test files matching tests/test_*.cpp" >&2
+        exit 1
+    fi
+
+    cd "$PROJECT_ROOT" # fixtures are written relative to the working directory
+
+    suites_run=0
+    suites_failed=0
+    failed_names=()
+    for tf in "${TEST_FILES[@]}"; do
+        suite="$(basename "$tf" .cpp)"
+        exe="$PROJECT_ROOT/.build_test_${suite}_$$.exe"
+
+        # set -e is on, so guard the compile explicitly to report which suite
+        # broke instead of dying with a bare g++ error
+        if ! g++ -std=c++17 -I"$PROJECT_ROOT" -DAZT_SUITE_NAME="\"$suite\"" \
+                 "$tf" -o "$exe"; then
+            echo "  BUILD FAILED  $suite"
+            echo ""
+            suites_failed=$((suites_failed + 1))
+            failed_names+=("$suite (build)")
+            suites_run=$((suites_run + 1))
+            continue
+        fi
+
+        set +e
+        "$exe"
+        status=$?
+        set -e
+
+        rm -f "$exe"
+        suites_run=$((suites_run + 1))
+        if [[ $status -ne 0 ]]; then
+            suites_failed=$((suites_failed + 1))
+            failed_names+=("$suite")
+        fi
+    done
+
+    # sweep any fixture a crashed test didn't get to clean up itself
+    rm -f "$PROJECT_ROOT"/.azt_test_*.csv
+
+    if [[ $suites_failed -eq 0 ]]; then
+        echo "all $suites_run suite(s) passed"
+        exit 0
+    fi
+    echo "$suites_failed of $suites_run suite(s) failed:"
+    for n in "${failed_names[@]}"; do echo "  - $n"; done
+    exit 1
 fi
 
 if [[ -z "$RUNFILE" ]] && [[ $CLEAN -eq 0 ]]; then

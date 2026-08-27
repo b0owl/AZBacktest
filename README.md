@@ -34,11 +34,44 @@ bash build.sh -runfile exampleStrategies/BuyAndHold.cpp
 # generate single-header amalgamation (azbacktest.h)
 bash build.sh
 
+# build and run the unit tests
+bash build.sh -tests
+
 # clean leftover build artifacts
 bash build.sh -clean
 ```
 
 Requires g++ with C++17 (C++20 if Parquet support is linked in, see below), GLFW and OpenGL (vendored under `vendor/`).
+
+## Tests
+
+`bash build.sh -tests` compiles every `tests/test_*.cpp` and runs them, printing a line per test plus a per-suite summary. It exits non-zero if anything fails, so CI can gate on it.
+
+Each test file becomes its **own binary** rather than one linked suite. `backtestApi.h` declares `trades`, `realizedProfit`, and `equityCurve` as non-`inline` globals, so two test TUs including it would collide at link time. Separate binaries also stop the global `kCSVMapping` leaking between files.
+
+Tests run on fake data: `tests/fakeData.h` provides a `TempCsv` helper that writes a fixture to a scratch file and deletes it on destruction, so nothing is checked into the repo and each test states the rows it cares about right next to its assertions. `azt::useFixtureMapping()` points `kCSVMapping` at the shared fixture layout; call it at the top of any test that reads data, then override whichever fields the test is exercising.
+
+Adding a test:
+
+```cpp
+#include "tests/testFramework.h"
+#include "tests/fakeData.h"
+#include "src/marketData.h"
+
+TEST(myThingWorks) {
+    azt::useFixtureMapping();
+    azt::TempCsv csv(azt::basicTicks());
+    MarketData md(csv.path());
+
+    auto t = md.nextTick();
+    REQUIRE(t.has_value());   // fatal, bails out of this test
+    CHECK_F(t->size, 3.f);    // non-fatal, keeps going
+}
+```
+
+No `main()` needed, `testFramework.h` supplies one. Assertions are `CHECK`, `CHECK_EQ`, `CHECK_NE`, `CHECK_NEAR`, `CHECK_F` (float compare at a fixed tolerance), and `REQUIRE`. Everything except `REQUIRE` is non-fatal, so one run surfaces every problem in a test rather than stopping at the first.
+
+Fixtures are CSV, so the Parquet backend isn't covered by these.
 
 ## Configuration
 
@@ -70,6 +103,12 @@ aggressor                = -1
 buySideAggressorAlias    = "B"
 sellSideAggressorAlias   = "S"
 unknownSideAggressorAlias = "N"
+
+# resting (top-of-book) size columns (set to -1 to disable)
+# a per-row snapshot of what's sitting on each side of the book, not traded
+# volume - on Databento TBBO these are bid_sz_00 / ask_sz_00
+restingBidCol = -1
+restingAskCol = -1
 
 # trading costs (all in pts)
 commission = 0.0
@@ -122,12 +161,16 @@ Returns the next raw tick (timestamp + price as string_views, size, and aggresso
 
 `Tick` also carries the volume split by aggressor: `executedBuys`, `executedSells`, and `unknownVolume`. For a tick exactly one of the three holds the whole `size`. They always sum to `size`.
 
+`restingBids` and `restingAsks` are the other kind of number: top-of-book size sitting unfilled on each side, read from `restingBidCol` / `restingAskCol`. They're snapshots rather than flow, so they're independent of `size` and don't participate in that sum. Both stay `0` when the columns aren't mapped.
+
 #### `std::optional<Tick> MarketData::nextClose(int seconds)`
 Returns the close tick of the next bar spanning at least `seconds`. Skips forward until the timestamp exceeds start + seconds.
 
 - `seconds` — bar width in seconds (e.g. 60 for 1-min bars)
 
 `timestamp`, `price`, and `side` come from the bar's closing row. `size` and the `executedBuys` / `executedSells` / `unknownVolume` split are sums over every tick that fell inside the bar, so the split is per-bar rather than per-tick.
+
+`restingBids` / `restingAsks` come from the closing row too. Summing a book snapshot across a bar would be meaningless, so they're reported the same way the close price is.
 
 ---
 
@@ -162,19 +205,20 @@ Advances the open trade's P&L to current price and records an equity curve sampl
 
 - `timestamp` — if non-empty, gets parsed for equity curve timestamps
 
-#### `DataWindow Handling::requestDataWindow(MarketData& md, int period, int timeframe = 0, void (*whenUnknown)() = [](){}, bool supressWarnings = false, int tickRes = 1)`
-Pulls `period` bars from the market data source. Returns a `DataWindow` with parallel `prices`, `volumes`, `executedBuys`, `executedSells`, and `deltas` vectors.
+#### `DataWindow Handling::requestDataWindow(MarketData& md, int period, int timeframe = 0, void (*whenUnknown)() = [](){}, int tickRes = 1)`
+Pulls `period` bars from the market data source. Returns a `DataWindow` with parallel `prices`, `volumes`, `executedBuys`, `executedSells`, `deltas`, `restingBids`, and `restingAsks` vectors.
 
 - `md` — MarketData source
 - `period` — how many rows/bars to load
 - `timeframe` — 0 = tick-by-tick, >0 = close every N seconds
 - `whenUnknown` — callback invoked when the aggressor side can't be classified
-- `supressWarnings` — set true to silence tickRes warnings
 - `tickRes` — tick mode only: keep every Nth tick (1 = full resolution)
 
 `executedBuys[i]` is the volume that lifted the ask (buy aggressor) and `executedSells[i]` the volume that hit the bid (sell aggressor), classified with the aliases from `config.toml`. In tick mode one of the two carries the whole tick; in bar mode (`timeframe > 0`) both are sums across every tick in the bar. `deltas[i]` is the price change from the previous bar.
 
-All five vectors are the same length and share an index, so `executedBuys[i]` always belongs to `prices[i]`. Volume whose side matched neither alias is left out of both, meaning `executedBuys[i] + executedSells[i] <= volumes[i]`, and `whenUnknown` fires once per bar that contained any of it.
+`restingBids[i]` / `restingAsks[i]` are the book snapshot rather than executed flow, so they're never summed - in bar mode they're the closing tick's resting size, the same row `prices[i]` came from. They're `0` throughout unless `restingBidCol` / `restingAskCol` are mapped.
+
+All seven vectors are the same length and share an index, so `executedBuys[i]` always belongs to `prices[i]`. Volume whose side matched neither alias is left out of both, meaning `executedBuys[i] + executedSells[i] <= volumes[i]`, and `whenUnknown` fires once per bar that contained any of it.
 
 Note that `tickRes > 1` drops the skipped ticks outright, so the split only covers ticks that were actually kept - it won't reconcile against `volumes` from another source at that setting.
 
