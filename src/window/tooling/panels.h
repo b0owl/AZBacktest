@@ -35,7 +35,7 @@ inline Series buildColumnChild(seriesPool::NamedSeries& s, int col, bool onY2) {
 
 /// @brief build a panel child for an xyBars pool series (histogram-style)
 inline Series buildXYChild(seriesPool::NamedSeries& s, bool onY2) {
-    Series c{Bar, s.name, s.data[1], false, s.color, false, onY2, s.data[0], s.barWidth};
+    Series c{s.type == 3 ? Scatter : Bar, s.name, s.data[1], false, s.color, false, onY2, s.data[0], s.barWidth};
     c.sourceSeries = s.name;
     c.sourceXY = true;
     return c;
@@ -155,8 +155,12 @@ inline void renderPanels() {
                         }
                     }
                     ImPlot::SetAxes(ImAxis_X1, c.onY2 ? ImAxis_Y2 : ImAxis_Y1);
-                    if (c.kind == Scatter)
-                        ImPlot::PlotScatter(c.label.c_str(), c.data.data(), (int)c.data.size());
+                    if (c.kind == Scatter) {
+                        if (!c.xs.empty())
+                            ImPlot::PlotScatter(c.label.c_str(), c.xs.data(), c.data.data(), (int)c.data.size());
+                        else
+                            ImPlot::PlotScatter(c.label.c_str(), c.data.data(), (int)c.data.size());
+                    }
                     else if (c.kind == ErrorBar) {
                         ImPlot::PlotLine(c.label.c_str(), c.data.data(), (int)c.data.size());
                         if (!c.errors.empty()) {
