@@ -146,6 +146,27 @@ void addScatter(std::string name, std::vector<T> values, RGBA color = {}, bool o
     pool.push_back({std::move(name), {std::move(col)}, {}, 3, color, onY2});
 }
 
+/// @brief add an (x,y) scatter series, e.g. a correlation: xs=predictor, ys=response
+///
+/// unlike addScatter, which plots values against their index, this plots each
+/// ys[i] at xs[i], which is what you want when the question is how two series
+/// move together rather than how one moves over time
+/// @param name  display name
+/// @param xs    x-coordinate per point
+/// @param ys    y-coordinate per point, same length as xs
+/// @param color optional RGBA color
+/// @param onY2  default axis when added to a panel
+template<typename Tx, typename Ty,
+         typename = std::enable_if_t<std::is_arithmetic_v<Tx> && std::is_arithmetic_v<Ty>>>
+void addXYScatter(std::string name, std::vector<Tx> xs, std::vector<Ty> ys,
+                  RGBA color = {}, bool onY2 = false) {
+    std::vector<float> xf(xs.begin(), xs.end());
+    std::vector<float> yf(ys.begin(), ys.end());
+    NamedSeries s{std::move(name), {std::move(xf), std::move(yf)}, {}, 3, color, onY2};
+    s.xyBars = true;
+    pool.push_back(std::move(s));
+}
+
 /// @brief add a line series with error bars to the pool
 /// @param name   display name
 /// @param values center values per point
