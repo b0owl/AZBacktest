@@ -5,6 +5,8 @@ imgui.ini
 *.csv
 *.parquet
 *.DS_Store
+*.exe
 Data/glbx-mdp3-20250601-20260514.tbbo.parquet
 /AZBacktest.code-workspace
+/.vscode
 config.toml
