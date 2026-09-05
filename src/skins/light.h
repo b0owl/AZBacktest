@@ -2,6 +2,8 @@
 #include "imgui.h"
 #include "implot.h"
 
+#include "skinVars.h"
+
 namespace skins {
 
 inline void light() {
@@ -116,6 +118,12 @@ inline void light() {
     pc[ImPlotCol_AxisText]    = rgba(0.30f, 0.30f, 0.30f);
     pc[ImPlotCol_AxisGrid]    = rgba(0.0f, 0.0f, 0.0f, 0.08f);
     pc[ImPlotCol_AxisTick]    = rgba(0.55f, 0.55f, 0.55f);
+
+    gridStepX = 20.0f;
+    gridStepY = 20.0f;
+    gridColor = rgba(0.0f, 0.0f, 0.0f, 0.1f);
+
+    baseColor = {0.20f, 0.42f, 0.68f, 1.0f};
 }
 
 } // namespace skins

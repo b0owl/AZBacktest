@@ -6,6 +6,7 @@
 #include "../src/window/window.h"
 #include "../src/skins/light.h"
 #include "../src/skins/dark.h"
+#include "../src/skins/toxic.h"
 
 int main() {
     // prices has to outlive handler, which holds a reference to it
@@ -73,14 +74,9 @@ int main() {
     mainPaths.push_back(profit);
     for (auto& p : pctPaths) mainPaths.push_back(std::move(p));
 
-    addSeries("mc cloud", mcPaths, {}, 0, RGBA{0.4f, 0.4f, 0.4f, 0.3f});
+    addSeries("mc cloud", mcPaths, {}, "line", RGBA{0.4f, 0.4f, 0.4f, 0.3f});
     addSeries("equity + percentiles", mainPaths,
-        {"actual", "p5", "p50", "p95"}, 0, RGBA{0.5f, 0.8f, 0.5f, 1.0f});
+        {"actual", "p5", "p50", "p95"}, "line", RGBA{0.5f, 0.8f, 0.5f, 1.0f});
 
-    std::cout << "Thanks for trying out my project :)\n"
-              << "You can change the theme by calling showConsole with the appropriate function type "
-                 "(see the bottom of any example file); all normal ImGUI attributes are customizeable.\n";
-
-    showConsole("Console", skins::light);
-    // showConsole("Console", skins::dark);
+    showConsole("Console", skins::toxic);
 }

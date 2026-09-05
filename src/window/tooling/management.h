@@ -136,3 +136,4 @@ inline int nextPanelId() {
 }
 
 } // namespace panelManagement
+

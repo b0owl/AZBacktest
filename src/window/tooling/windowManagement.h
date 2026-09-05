@@ -2,9 +2,12 @@
 #define GL_SILENCE_DEPRECATION
 #include <GLFW/glfw3.h>
 #include "imgui.h"
+#include "imgui_internal.h" 
 #include "implot.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
+
+#include "../../skins/skinVars.h" // skins::gridStepX/Y / gridColor / baseColor
 
 namespace windowManagement {
 
@@ -44,6 +47,142 @@ inline void startFrame() {
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
+}
+
+/// @brief position and size of the imgui window the user is currently dragging
+struct MovingWindowInfo {
+    float x = 0, y = 0; // top left corner in main window pixel coords
+    float w = 0, h = 0; // size in pixels
+};
+
+/// @brief the window being dragged this frame, resolved to its root since
+/// dragging a child moves the root, or nullptr when nothing is moving
+inline ImGuiWindow* movingWindowPtr() {
+    ImGuiContext* g = ImGui::GetCurrentContext();
+    ImGuiWindow* win = g ? g->MovingWindow : nullptr;
+    if (win && win->RootWindow) win = win->RootWindow;
+    return win;
+}
+
+/// @brief find where the imgui window being moved this frame sits
+/// call it after startFrame(), imgui resolves the drag during NewFrame()
+/// @return all zeroes when nothing is being dragged
+inline MovingWindowInfo movingWindow() {
+    MovingWindowInfo info;
+    if (ImGuiWindow* win = movingWindowPtr()) {
+        info.x = win->Pos.x;  info.y = win->Pos.y;
+        info.w = win->Size.x; info.h = win->Size.y;
+    }
+    return info;
+}
+
+/// @brief outline drag, the dragged window is pinned to the spot it was picked
+/// up from so it never follows the cursor, and only drops to where the cursor
+/// left it once the mouse comes up
+/// call once per frame after startFrame(), the returned rect is the drop target
+/// and is what you want to draw the outline around
+/// @return the pending drop rect, all zeroes when nothing is being dragged
+inline MovingWindowInfo holdMovingWindow() {
+    static ImGuiID heldId = 0;
+    static ImVec2 dropAt(0, 0);
+
+    ImGuiContext* g = ImGui::GetCurrentContext();
+    if (!g) return {};
+
+    if (ImGuiWindow* win = movingWindowPtr()) {
+        ImVec2 origin = g->IO.MouseClickedPos[0] - g->ActiveIdClickOffset;  
+        ImVec2 delta  = g->IO.MousePos - g->IO.MouseClickedPos[0];          
+
+        // snap per axis, a step of zero or less means that axis is left free
+        // rather than divided by zero
+        const ImVec2 target = origin + delta;
+        dropAt.x = skins::gridStepX > 0.0f
+                 ? ImFloor(target.x / skins::gridStepX) * skins::gridStepX : target.x;
+        dropAt.y = skins::gridStepY > 0.0f
+                 ? ImFloor(target.y / skins::gridStepY) * skins::gridStepY : target.y;
+        heldId = win->ID;
+
+        ImGui::SetWindowPos(win, ImVec2(g->IO.MouseClickedPos[0].x - g->ActiveIdClickOffset.x,
+                                        g->IO.MouseClickedPos[0].y - g->ActiveIdClickOffset.y),
+                            ImGuiCond_Always);
+
+        return {dropAt.x, dropAt.y, win->Size.x, win->Size.y};
+    }
+
+    if (heldId != 0) {
+        if (ImGuiWindow* win = ImGui::FindWindowByID(heldId))
+            ImGui::SetWindowPos(win, dropAt, ImGuiCond_Always);
+        heldId = 0;
+    }
+    return {};
+}
+
+/// @brief which edges the active resize handle drives, all false when nothing
+/// on this window is being resized
+struct ResizeEdges {
+    bool left = false, right = false, up = false, down = false;
+    bool any() const { return left || right || up || down; }
+};
+
+/// @brief work out which resize handle of win currently holds the active id
+/// corner numbering is imgui's own resize_grip_def order, which is 0 lower right,
+/// 1 lower left, 2 upper left, 3 upper right, not the clockwise order you'd guess
+inline ResizeEdges activeResizeEdges(ImGuiWindow* win) {
+    ResizeEdges e;
+    ImGuiContext* g = ImGui::GetCurrentContext();
+    if (!g || !win || !g->ActiveId) return e;
+
+    for (int n = 0; n < 4; n++) {
+        if (g->ActiveId != ImGui::GetWindowResizeCornerID(win, n)) continue;
+        e.right = (n == 0 || n == 3);
+        e.left  = (n == 1 || n == 2);
+        e.down  = (n == 0 || n == 1);
+        e.up    = (n == 2 || n == 3);
+        return e;
+    }
+    if      (g->ActiveId == ImGui::GetWindowResizeBorderID(win, ImGuiDir_Left))  e.left  = true;
+    else if (g->ActiveId == ImGui::GetWindowResizeBorderID(win, ImGuiDir_Right)) e.right = true;
+    else if (g->ActiveId == ImGui::GetWindowResizeBorderID(win, ImGuiDir_Up))    e.up    = true;
+    else if (g->ActiveId == ImGui::GetWindowResizeBorderID(win, ImGuiDir_Down))  e.down  = true;
+    return e;
+}
+
+/// @brief pull the edges of a window being resized onto the grid
+/// only the edges the active handle actually drives get snapped, so dragging the
+/// right border never nudges the left one, and a step of zero leaves that axis free
+/// call once per frame after startFrame(), same as holdMovingWindow()
+/// @return true while a resize is being snapped
+inline bool snapResizingWindow() {
+    ImGuiContext* g = ImGui::GetCurrentContext();
+    if (!g || !g->ActiveIdWindow) return false;
+
+    ImGuiWindow* win = g->ActiveIdWindow;
+    const ResizeEdges e = activeResizeEdges(win);
+    if (!e.any()) return false;
+
+    ImVec2 mn = win->Pos;
+    ImVec2 mx = ImVec2(win->Pos.x + win->SizeFull.x, win->Pos.y + win->SizeFull.y);
+
+    const float sx = skins::gridStepX, sy = skins::gridStepY;
+    if (sx > 0.0f) {
+        if (e.left)  mn.x = ImFloor(mn.x / sx) * sx;
+        if (e.right) mx.x = ImFloor(mx.x / sx) * sx;
+    }
+    if (sy > 0.0f) {
+        if (e.up)   mn.y = ImFloor(mn.y / sy) * sy;
+        if (e.down) mx.y = ImFloor(mx.y / sy) * sy;
+    }
+
+    // never snap below imgui's own minimum. when it's a left or top edge being
+    // dragged the position has to give way, otherwise the window would creep
+    ImVec2 size(mx.x - mn.x, mx.y - mn.y);
+    const ImVec2 minSize = ImGui::GetStyle().WindowMinSize;
+    if (size.x < minSize.x) { size.x = minSize.x; if (e.left) mn.x = mx.x - size.x; }
+    if (size.y < minSize.y) { size.y = minSize.y; if (e.up)   mn.y = mx.y - size.y; }
+
+    ImGui::SetWindowPos(win, mn, ImGuiCond_Always);
+    ImGui::SetWindowSize(win, size, ImGuiCond_Always);
+    return true;
 }
 
 inline void endFrame(GLFWwindow* window) {

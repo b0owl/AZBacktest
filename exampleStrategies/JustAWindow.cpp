@@ -9,6 +9,7 @@
 #include "../src/window/window.h"
 #include "../src/skins/light.h"
 #include "../src/skins/dark.h"
+#include "../src/skins/toxic.h"
 
 int main() {
     initSeriesPool(
@@ -43,10 +44,5 @@ int main() {
     addStat("ducks in a row", 7.0f);
     addStat("pi (approx)", 3.14159f);
 
-    std::cout << "Thanks for trying out my project :)\n"
-              << "You can change the theme by calling showConsole with the appropriate function type "
-                 "(see the bottom of any example file); all normal ImGUI attributes are customizeable.\n";
-
-    showConsole("Console", skins::light);
-    // showConsole("Console", skins::dark);
+    showConsole("Console", skins::toxic);
 }
