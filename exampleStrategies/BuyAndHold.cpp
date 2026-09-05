@@ -6,6 +6,7 @@
 #include "../src/window/window.h"
 #include "../src/skins/light.h"
 #include "../src/skins/dark.h"
+#include "../src/skins/toxic.h"
 
 int main() {
     // prices has to outlive handler, which holds a reference to it
@@ -35,12 +36,7 @@ int main() {
     handler.closeAll();
 
     auto profit = returnProfitOverTime(1440);
-    addSeries("equity", std::vector<std::vector<float>>{profit}, {"actual"}, 0, RGBA{0.5f, 0.8f, 0.5f, 1.0f});
-
-    std::cout << "Thanks for trying out my project :)\n"
-              << "You can change the theme by calling showConsole with the appropriate function type "
-                 "(see the bottom of any example file); all normal ImGUI attributes are customizeable.\n";
+    addSeries("equity", std::vector<std::vector<float>>{profit}, {"actual"}, "line", RGBA{0.5f, 0.8f, 0.5f, 1.0f});
 
     showConsole("Console", skins::dark);
-    // showConsole("Console", skins::light);
 }

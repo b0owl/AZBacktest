@@ -3,6 +3,9 @@
  * @brief upstream exposure to internal panel / window management systems
  */
 
+
+#include <iostream>
+
 #define GL_SILENCE_DEPRECATION
 #include <GLFW/glfw3.h>
 #include "imgui.h"
@@ -13,6 +16,7 @@
 #include "string"
 
 #include "tooling/windowManagement.h"
+#include "tooling/windowRendering.h"
 #include "tooling/panels.h"
 #include "tooling/widgets.h"
 
@@ -53,34 +57,115 @@ void newBarSeries(std::string panelId) {
 
 ///@}
 
+std::vector<px> renderBuffer; // pixels to render
+std::vector<px> gridBuffer; // draw *under* the imgui stuff, unlike renderBuffer
+
+/// live position of whichever imgui window is being dragged, refreshed once per
+/// frame inside showConsole, inactive when nothing is being moved
+windowManagement::MovingWindowInfo movingWindow;
+
 /// @brief open the main console window and run the render loop until close
 /// @param title window title (currently unused, window gets titled at creation)
 void showConsole(const char* title, void (skin)()) {
     static GLFWwindow* window = windowManagement::createWindow(skin);
-    // must run before the first ImGui::NewFrame() below, since that's when
-    // ImGui loads the .ini and fires these handlers to restore panels/widgets
     panelManagement::registerSettingsHandler();
     widgetManagement::registerSettingsHandler();
 
+    px pxTemplate;
+    pxTemplate.win = window;
+    pxTemplate.r = 0.3;
+    pxTemplate.g = 0.3;
+    pxTemplate.b = 0.3;
+    pxTemplate.a = 0.4;
+
     while (!glfwWindowShouldClose(window)) {
         windowManagement::startFrame();
+        movingWindow = windowManagement::holdMovingWindow();
+        windowManagement::snapResizingWindow();
 
         panelManagement::renderPanels();
         widgetManagement::renderWindows();
         if (ImGui::BeginMainMenuBar()) {
-            if (ImGui::BeginMenu("New")) {
-                if (ImGui::MenuItem("Panel")) {
-                    std::string id = std::to_string(panelManagement::nextPanelId());
-                    panelManagement::newPanel(id);
-                    newLineSeries(id);
-                }
-                if (ImGui::MenuItem("Widget")) {
-                    widgetManagement::newWindow(std::to_string(widgetManagement::nextWindowId()));
-                }
-                ImGui::EndMenu();
+            if (ImGui::MenuItem("Chart")) {
+                std::string id = std::to_string(panelManagement::nextPanelId());
+                panelManagement::newPanel(id);
+                newLineSeries(id);
             }
+            if (ImGui::MenuItem("Widget")) {
+                widgetManagement::newWindow(std::to_string(widgetManagement::nextWindowId()));
+            }
+
             ImGui::EndMainMenuBar();
         }
+
+        if (movingWindow.w > 0) {
+            const int left   = static_cast<int>(movingWindow.x);
+            const int top    = static_cast<int>(movingWindow.y);
+            const int right  = left + static_cast<int>(movingWindow.w) - 1;
+            const int bottom = top + static_cast<int>(movingWindow.h) - 1;
+
+            constexpr int thickness = 5;
+            for (int t = 0; t < thickness; t++) {
+                for (int x = left; x <= right; x++) {
+                    pxTemplate.px = static_cast<float>(x);
+                    pxTemplate.py = static_cast<float>(top + t);
+                    renderBuffer.push_back(pxTemplate);
+                    pxTemplate.py = static_cast<float>(bottom - t);
+                    renderBuffer.push_back(pxTemplate);
+                }
+                for (int y = top + thickness; y <= bottom - thickness; y++) {
+                    pxTemplate.py = static_cast<float>(y);
+                    pxTemplate.px = static_cast<float>(left + t);
+                    renderBuffer.push_back(pxTemplate);
+                    pxTemplate.px = static_cast<float>(right - t);
+                    renderBuffer.push_back(pxTemplate);
+                }
+            }
+        }
+
+        {
+            const ImVec2 disp = ImGui::GetIO().DisplaySize;
+            static float lastW = -1, lastH = -1, lastStepX = -1, lastStepY = -1;
+            if (disp.x != lastW || disp.y != lastH
+                || skins::gridStepX != lastStepX || skins::gridStepY != lastStepY) {
+                lastW = disp.x; lastH = disp.y;
+                lastStepX = skins::gridStepX; lastStepY = skins::gridStepY;
+                gridBuffer.clear();
+                px gp;
+                gp.win = window;
+                gp.r = skins::gridColor.x; gp.g = skins::gridColor.y;
+                gp.b = skins::gridColor.z; gp.a = skins::gridColor.w;
+                // gridStepX spaces the vertical lines, gridStepY the horizontal
+                // ones, either can be off on its own
+                if (skins::gridStepX > 0.0f) {
+                    for (float x = 0; x < disp.x; x += skins::gridStepX) {
+                        gp.px = x;
+                        for (int y = 0; y < (int)disp.y; y++) {
+                            gp.py = (float)y;
+                            gridBuffer.push_back(gp);
+                        }
+                    }
+                }
+                if (skins::gridStepY > 0.0f) {
+                    for (float y = 0; y < disp.y; y += skins::gridStepY) {
+                        gp.py = y;
+                        for (int x = 0; x < (int)disp.x; x++) {
+                            gp.px = (float)x;
+                            gridBuffer.push_back(gp);
+                        }
+                    }
+                }
+            }
+        }
+
+        // grid goes under the windows, the drag outline goes over them
+        for (int i=0; i<gridBuffer.size(); i++) {
+            draw_px_under(gridBuffer[i]);
+        }
+        for (int i=0; i<renderBuffer.size(); i++) {
+            draw_px(renderBuffer[i]);
+        }
+        renderBuffer = {};
 
         windowManagement::endFrame(window);
     }

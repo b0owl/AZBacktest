@@ -6,7 +6,7 @@
 
 namespace skins {
 
-inline void dark() {
+inline void toxic() {
     auto& s = ImGui::GetStyle();
 
     s.WindowRounding    = 0.0f;
@@ -33,58 +33,59 @@ inline void dark() {
     auto rgba = [](float r, float g, float b, float a = 1.0f) {
         return ImVec4(r, g, b, a);
     };
-    const ImVec4 bg0     = rgba(0.09f, 0.09f, 0.09f);
-    const ImVec4 bg1     = rgba(0.11f, 0.11f, 0.11f);
-    const ImVec4 bg2     = rgba(0.13f, 0.13f, 0.13f);
-    const ImVec4 frame   = rgba(0.16f, 0.16f, 0.16f);
-    const ImVec4 hover   = rgba(0.22f, 0.22f, 0.22f);
-    const ImVec4 active  = rgba(0.28f, 0.28f, 0.28f);
-    const ImVec4 border  = rgba(0.20f, 0.20f, 0.20f);
-    const ImVec4 grab    = rgba(0.30f, 0.30f, 0.30f);
-    const ImVec4 text    = rgba(0.90f, 0.90f, 0.90f);
-    const ImVec4 dim     = rgba(0.50f, 0.50f, 0.50f);
-    const ImVec4 accent  = rgba(0.55f, 0.70f, 0.88f);
-    const ImVec4 accentH = rgba(0.65f, 0.78f, 0.94f);
+    // near black violet base, purple chrome, acid green accent
+    const ImVec4 bg0     = rgba(0.055f, 0.043f, 0.078f);
+    const ImVec4 bg1     = rgba(0.075f, 0.059f, 0.106f);
+    const ImVec4 bg2     = rgba(0.102f, 0.078f, 0.145f);
+    const ImVec4 frame   = rgba(0.133f, 0.102f, 0.192f);
+    const ImVec4 hover   = rgba(0.196f, 0.145f, 0.282f);
+    const ImVec4 active  = rgba(0.271f, 0.196f, 0.384f);
+    const ImVec4 border  = rgba(0.290f, 0.180f, 0.420f);
+    const ImVec4 grab    = rgba(0.400f, 0.250f, 0.560f);
+    const ImVec4 text    = rgba(0.902f, 0.878f, 0.945f);
+    const ImVec4 dim     = rgba(0.522f, 0.475f, 0.612f);
+    const ImVec4 accent  = rgba(0.482f, 1.000f, 0.121f);
+    const ImVec4 accentH = rgba(0.647f, 1.000f, 0.353f);
 
     auto& c = s.Colors;
     c[ImGuiCol_Text]                  = text;
     c[ImGuiCol_TextDisabled]          = dim;
     c[ImGuiCol_WindowBg]              = bg0;
     c[ImGuiCol_ChildBg]               = bg1;
-    c[ImGuiCol_PopupBg]               = rgba(0.11f, 0.11f, 0.11f, 0.94f);
+    c[ImGuiCol_PopupBg]               = rgba(0.075f, 0.059f, 0.106f, 0.94f);
     c[ImGuiCol_Border]                = border;
     c[ImGuiCol_BorderShadow]          = rgba(0.0f, 0.0f, 0.0f, 0.0f);
     c[ImGuiCol_FrameBg]               = frame;
     c[ImGuiCol_FrameBgHovered]        = hover;
     c[ImGuiCol_FrameBgActive]         = active;
     c[ImGuiCol_TitleBg]               = bg0;
-    c[ImGuiCol_TitleBgActive]         = bg2;
-    c[ImGuiCol_TitleBgCollapsed]      = rgba(0.05f, 0.05f, 0.05f, 0.75f);
+    c[ImGuiCol_TitleBgActive]         = rgba(0.180f, 0.106f, 0.290f);
+    c[ImGuiCol_TitleBgCollapsed]      = rgba(0.039f, 0.031f, 0.055f, 0.75f);
     c[ImGuiCol_MenuBarBg]             = bg2;
-    c[ImGuiCol_ScrollbarBg]           = rgba(0.05f, 0.05f, 0.05f, 0.50f);
+    c[ImGuiCol_ScrollbarBg]           = rgba(0.039f, 0.031f, 0.055f, 0.50f);
     c[ImGuiCol_ScrollbarGrab]         = grab;
-    c[ImGuiCol_ScrollbarGrabHovered]  = rgba(0.38f, 0.38f, 0.38f);
-    c[ImGuiCol_ScrollbarGrabActive]   = rgba(0.46f, 0.46f, 0.46f);
+    c[ImGuiCol_ScrollbarGrabHovered]  = rgba(0.490f, 0.310f, 0.667f);
+    c[ImGuiCol_ScrollbarGrabActive]   = rgba(0.576f, 0.376f, 0.769f);
     c[ImGuiCol_CheckMark]             = accent;
     c[ImGuiCol_SliderGrab]            = accent;
     c[ImGuiCol_SliderGrabActive]      = accentH;
     c[ImGuiCol_Button]                = frame;
     c[ImGuiCol_ButtonHovered]         = hover;
     c[ImGuiCol_ButtonActive]          = active;
-    c[ImGuiCol_Header]                = rgba(0.18f, 0.18f, 0.18f);
-    c[ImGuiCol_HeaderHovered]         = rgba(0.25f, 0.25f, 0.25f);
-    c[ImGuiCol_HeaderActive]          = rgba(0.32f, 0.32f, 0.32f);
+    c[ImGuiCol_Header]                = rgba(0.157f, 0.114f, 0.231f);
+    c[ImGuiCol_HeaderHovered]         = rgba(0.235f, 0.169f, 0.341f);
+    c[ImGuiCol_HeaderActive]          = rgba(0.310f, 0.220f, 0.447f);
     c[ImGuiCol_Separator]             = border;
     c[ImGuiCol_SeparatorHovered]      = accent;
     c[ImGuiCol_SeparatorActive]       = accentH;
-    c[ImGuiCol_ResizeGrip]            = rgba(0.24f, 0.24f, 0.24f, 0.25f);
-    c[ImGuiCol_ResizeGripHovered]     = rgba(0.40f, 0.40f, 0.40f, 0.67f);
-    c[ImGuiCol_ResizeGripActive]      = rgba(0.50f, 0.50f, 0.50f, 0.95f);
+    c[ImGuiCol_ResizeGrip]            = rgba(0.482f, 1.000f, 0.121f, 0.20f);
+    c[ImGuiCol_ResizeGripHovered]     = rgba(0.482f, 1.000f, 0.121f, 0.55f);
+    c[ImGuiCol_ResizeGripActive]      = rgba(0.647f, 1.000f, 0.353f, 0.90f);
     c[ImGuiCol_Tab]                   = bg2;
     c[ImGuiCol_TabHovered]            = hover;
     c[ImGuiCol_TabActive]             = frame;
     c[ImGuiCol_TabUnfocused]          = bg0;
-    c[ImGuiCol_TabUnfocusedActive]    = rgba(0.14f, 0.14f, 0.14f);
+    c[ImGuiCol_TabUnfocusedActive]    = rgba(0.118f, 0.086f, 0.169f);
     c[ImGuiCol_PlotLines]             = accent;
     c[ImGuiCol_PlotLinesHovered]      = accentH;
     c[ImGuiCol_PlotHistogram]         = accent;
@@ -96,7 +97,7 @@ inline void dark() {
     c[ImGuiCol_TableRowBg]            = bg0;
     c[ImGuiCol_TableRowBgAlt]         = bg1;
     c[ImGuiCol_TableBorderStrong]     = border;
-    c[ImGuiCol_TableBorderLight]      = rgba(0.16f, 0.16f, 0.16f);
+    c[ImGuiCol_TableBorderLight]      = rgba(0.157f, 0.114f, 0.231f);
 
     auto& p  = ImPlot::GetStyle();
     p.PlotPadding        = ImVec2(10, 10);
@@ -110,23 +111,23 @@ inline void dark() {
     p.MinorAlpha         = 0.10f;
     auto& pc = p.Colors;
     pc[ImPlotCol_FrameBg]     = bg0;
-    pc[ImPlotCol_PlotBg]      = rgba(0.06f, 0.06f, 0.06f);
+    pc[ImPlotCol_PlotBg]      = rgba(0.035f, 0.027f, 0.051f);
     pc[ImPlotCol_PlotBorder]  = border;
-    pc[ImPlotCol_LegendBg]    = rgba(0.09f, 0.09f, 0.09f, 0.90f);
-    pc[ImPlotCol_LegendBorder]= rgba(0.20f, 0.20f, 0.20f, 0.50f);
+    pc[ImPlotCol_LegendBg]    = rgba(0.055f, 0.043f, 0.078f, 0.90f);
+    pc[ImPlotCol_LegendBorder]= rgba(0.290f, 0.180f, 0.420f, 0.50f);
     pc[ImPlotCol_LegendText]  = text;
-    pc[ImPlotCol_AxisText]    = rgba(0.65f, 0.65f, 0.65f);
-    pc[ImPlotCol_AxisGrid]    = rgba(1.0f, 1.0f, 1.0f, 0.08f);
-    pc[ImPlotCol_AxisTick]    = rgba(0.30f, 0.30f, 0.30f);
+    pc[ImPlotCol_AxisText]    = rgba(0.647f, 0.600f, 0.729f);
+    pc[ImPlotCol_AxisGrid]    = rgba(0.482f, 1.000f, 0.121f, 0.10f);
+    pc[ImPlotCol_AxisTick]    = rgba(0.400f, 0.250f, 0.560f);
 
-    // window snap grid, light lines over a dark ground, matched to the implot axis grid alpha
+    // window snap grid, acid green over the violet ground
     gridStepX = 20.0f;
     gridStepY = 20.0f;
-    gridColor = rgba(1.0f, 1.0f, 1.0f, 0.08f);
+    gridColor = rgba(0.482f, 1.000f, 0.121f, 0.10f);
 
     // default series colour, the theme accent so a plot added with no
-    // explicit colour still reads as part of the skin (soft blue accent)
-    baseColor = {0.55f, 0.70f, 0.88f, 1.0f};
+    // explicit colour still reads as part of the skin (acid green accent)
+    baseColor = {0.482f, 1.000f, 0.121f, 1.0f};
 }
 
 } // namespace skins

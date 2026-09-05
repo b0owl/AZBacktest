@@ -72,6 +72,7 @@ FILES=(
     "$SCRIPT_DIR/src/marketData.h"
     "$SCRIPT_DIR/src/findEOF.h"
     "$SCRIPT_DIR/src/backtestApi.h"
+    "$SCRIPT_DIR/src/skins/skinVars.h"
     "$SCRIPT_DIR/src/window/tooling/seriesPool.h"
     "$SCRIPT_DIR/src/window/tooling/statPool.h"
     "$SCRIPT_DIR/src/initSeries.h"
@@ -79,8 +80,10 @@ FILES=(
     "$SCRIPT_DIR/src/window/tooling/panels.h"
     "$SCRIPT_DIR/src/window/tooling/widgets.h"
     "$SCRIPT_DIR/src/window/tooling/windowManagement.h"
+    "$SCRIPT_DIR/src/window/tooling/windowRendering.h"
     "$SCRIPT_DIR/src/skins/light.h"
     "$SCRIPT_DIR/src/skins/dark.h"
+    "$SCRIPT_DIR/src/skins/toxic.h"
     "$SCRIPT_DIR/src/window/window.h"
     "$SCRIPT_DIR/src/window/window.cpp"
 )
