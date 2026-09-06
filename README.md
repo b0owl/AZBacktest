@@ -1,4 +1,5 @@
-<img width="2048" height="1332" alt="image" src="https://github.com/user-attachments/assets/5096c757-2daf-478e-bc54-aa1de24dad1e" />
+<img width="2559" height="1417" alt="image" src="https://github.com/user-attachments/assets/b4281c86-cd32-4adc-9f5e-32840e39445a" />
+
 
 # AZBacktest
 
