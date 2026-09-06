@@ -82,6 +82,7 @@ void showConsole(const char* title, void (skin)()) {
         windowManagement::startFrame();
         movingWindow = windowManagement::holdMovingWindow();
         windowManagement::snapResizingWindow();
+        windowManagement::clampWindowsBelowMenuBar();
 
         panelManagement::renderPanels();
         widgetManagement::renderWindows();
