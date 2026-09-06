@@ -36,7 +36,7 @@ int main() {
     handler.closeAll();
 
     auto profit = returnProfitOverTime(1440);
-    addSeries("equity", std::vector<std::vector<float>>{profit}, {"actual"}, "line", RGBA{0.5f, 0.8f, 0.5f, 1.0f});
+    addLine("equity", std::vector<std::vector<float>>{profit}, {"actual"}, RGBA{0.5f, 0.8f, 0.5f, 1.0f});
 
     showConsole("Console", skins::dark);
 }

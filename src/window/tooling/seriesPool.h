@@ -37,7 +37,7 @@ inline int parseSeriesType(std::string name) {
     if (name == "heatmap" || name == "heatmaps")                return 2;
     if (name == "scatter")                                      return 3;
     if (name == "errorbar" || name == "errorbars" || name == "error") return 4;
-    fprintf(stderr, "addSeries: unknown series type \"%s\", falling back to line\n", name.c_str());
+    fprintf(stderr, "seriesPool: unknown series type \"%s\", falling back to line\n", name.c_str());
     return 0;
 }
 
@@ -101,35 +101,72 @@ inline NamedSeries* findSeries(const std::string& name) {
     return nullptr;
 }
 
-/// @brief add a 1D series (single column) to the pool
-/// @param name  display name for the series
-/// @param values the data, any arithmetic type gets converted to float
-/// @param type  "line", "bar", "heatmap", "scatter" or "errorbar"
-/// @param onY2  default axis when this series gets added to a panel, true = right (Y2)
-/// @param lineWidth line thickness in px when plotted as a Line, <=0 = let ImPlot pick
+// The pool requires 'line', 'bar', 'heatmap', 'scatter', or 'errorbar' from an older 
+//      series system. Removing it (as of writing this) is more complex than simply keeping the structure
+//      for that end of the project intact, while refactoring it here
+
+/// @brief shared body for the 1D adders, the only thing that varies is the kind
+/// @param kind  type name understood by parseSeriesType
 template<typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
-void addSeries(std::string name, std::vector<T> values, std::string type = "line", RGBA color = {}, bool onY2 = false, float lineWidth = -1.f) {
+void addColumn(std::string name, std::vector<T> values, const char* kind,
+               RGBA color, bool onY2, float lineWidth) {
     std::vector<float> col(values.begin(), values.end());
-    NamedSeries s{std::move(name), {std::move(col)}, {}, parseSeriesType(type), resolveColor(color), onY2};
+    NamedSeries s{std::move(name), {std::move(col)}, {}, parseSeriesType(kind), resolveColor(color), onY2};
     s.lineWidth = lineWidth;
     pool.push_back(std::move(s));
 }
 
-/// @brief add a 2D series (multiple columns) to the pool
-/// @param name     display name for the series
-/// @param values   vector of columns, each column is a vector of values
-/// @param colNames optional names for each column (shows up in explorer + plot legend)
-/// @param type     "line", "bar", "heatmap", "scatter" or "errorbar"
-/// @param onY2     default axis when this series gets added to a panel, true = right (Y2)
+/// @brief shared body for the 2D adders, one column per inner vector
+/// @param kind  type name understood by parseSeriesType
 template<typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
-void addSeries(std::string name, std::vector<std::vector<T>> values,
-               std::vector<std::string> colNames = {}, std::string type = "line", RGBA color = {}, bool onY2 = false) {
+void addColumns(std::string name, std::vector<std::vector<T>> values, const char* kind,
+                std::vector<std::string> colNames, RGBA color, bool onY2) {
     std::vector<std::vector<float>> cols;
     cols.reserve(values.size());
     for (auto& v : values) {
         cols.emplace_back(v.begin(), v.end());
     }
-    pool.push_back({std::move(name), std::move(cols), std::move(colNames), parseSeriesType(type), resolveColor(color), onY2});
+    pool.push_back({std::move(name), std::move(cols), std::move(colNames),
+                    parseSeriesType(kind), resolveColor(color), onY2});
+}
+
+/// @brief add a 1D line series to the pool
+/// @param name   display name for the series
+/// @param values the data, any arithmetic type gets converted to float
+/// @param color  optional RGBA color, unset picks up the skin's baseColor
+/// @param onY2   default axis when this series gets added to a panel, true = right (Y2)
+/// @param lineWidth line thickness in px, <=0 = let ImPlot pick
+template<typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+void addLine(std::string name, std::vector<T> values, RGBA color = {}, bool onY2 = false, float lineWidth = -1.f) {
+    addColumn(std::move(name), std::move(values), "line", color, onY2, lineWidth);
+}
+
+/// @brief add a multi column line series to the pool, one line per column
+/// @param values   vector of columns, each column is a vector of values
+/// @param colNames optional names per column (shows up in explorer + plot legend)
+template<typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+void addLine(std::string name, std::vector<std::vector<T>> values,
+             std::vector<std::string> colNames = {}, RGBA color = {}, bool onY2 = false) {
+    addColumns(std::move(name), std::move(values), "line", std::move(colNames), color, onY2);
+}
+
+/// @brief add a 1D bar series to the pool
+/// @param name   display name for the series
+/// @param values bar heights, plotted against their index
+/// @param color  optional RGBA color, unset picks up the skin's baseColor
+/// @param onY2   default axis when this series gets added to a panel, true = right (Y2)
+template<typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+void addBar(std::string name, std::vector<T> values, RGBA color = {}, bool onY2 = false, float lineWidth = -1.f) {
+    addColumn(std::move(name), std::move(values), "bar", color, onY2, lineWidth);
+}
+
+/// @brief add a multi column bar series to the pool, one bar set per column
+/// @param values   vector of columns, each column is a vector of values
+/// @param colNames optional names per column (shows up in explorer + plot legend)
+template<typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
+void addBar(std::string name, std::vector<std::vector<T>> values,
+            std::vector<std::string> colNames = {}, RGBA color = {}, bool onY2 = false) {
+    addColumns(std::move(name), std::move(values), "bar", std::move(colNames), color, onY2);
 }
 
 /// @brief add an (x,y) bar series, e.g. a histogram: xs=bucket value, ys=occurrences
@@ -142,7 +179,7 @@ void addXYBars(std::string name, std::vector<Tx> xs, std::vector<Ty> ys, float b
                RGBA color = {}, bool onY2 = false) {
     std::vector<float> xf(xs.begin(), xs.end());
     std::vector<float> yf(ys.begin(), ys.end());
-    NamedSeries s{std::move(name), {std::move(xf), std::move(yf)}, {}, 1, resolveColor(color), onY2};
+    NamedSeries s{std::move(name), {std::move(xf), std::move(yf)}, {}, parseSeriesType("bar"), resolveColor(color), onY2};
     s.xyBars = true;
     s.barWidth = barWidth;
     pool.push_back(std::move(s));
@@ -158,7 +195,7 @@ template<typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
 void addHeatmap(std::string name, std::vector<T> values, int rows, int cols, RGBA color = {},
                 HeatmapAxes axes = {}) {
     std::vector<float> flat(values.begin(), values.end());
-    NamedSeries s{std::move(name), {std::move(flat)}, {}, 2, resolveColor(color), false};
+    NamedSeries s{std::move(name), {std::move(flat)}, {}, parseSeriesType("heatmap"), resolveColor(color), false};
     s.heatmapRows = rows;
     s.heatmapCols = cols;
     s.heatmapAxes = std::move(axes);
@@ -173,7 +210,7 @@ void addHeatmap(std::string name, std::vector<T> values, int rows, int cols, RGB
 template<typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
 void addScatter(std::string name, std::vector<T> values, RGBA color = {}, bool onY2 = false) {
     std::vector<float> col(values.begin(), values.end());
-    pool.push_back({std::move(name), {std::move(col)}, {}, 3, resolveColor(color), onY2});
+    pool.push_back({std::move(name), {std::move(col)}, {}, parseSeriesType("scatter"), resolveColor(color), onY2});
 }
 
 /// @brief add an (x,y) scatter series, e.g. a correlation: xs=predictor, ys=response
@@ -192,7 +229,7 @@ void addXYScatter(std::string name, std::vector<Tx> xs, std::vector<Ty> ys,
                   RGBA color = {}, bool onY2 = false) {
     std::vector<float> xf(xs.begin(), xs.end());
     std::vector<float> yf(ys.begin(), ys.end());
-    NamedSeries s{std::move(name), {std::move(xf), std::move(yf)}, {}, 3, resolveColor(color), onY2};
+    NamedSeries s{std::move(name), {std::move(xf), std::move(yf)}, {}, parseSeriesType("scatter"), resolveColor(color), onY2};
     s.xyBars = true;
     pool.push_back(std::move(s));
 }
@@ -209,7 +246,7 @@ void addErrorBars(std::string name, std::vector<T> values, std::vector<Te> error
                   RGBA color = {}, bool onY2 = false) {
     std::vector<float> col(values.begin(), values.end());
     std::vector<float> err(errors.begin(), errors.end());
-    NamedSeries s{std::move(name), {std::move(col)}, {}, 4, resolveColor(color), onY2};
+    NamedSeries s{std::move(name), {std::move(col)}, {}, parseSeriesType("errorbar"), resolveColor(color), onY2};
     s.errors = std::move(err);
     pool.push_back(std::move(s));
 }
@@ -218,16 +255,16 @@ void addErrorBars(std::string name, std::vector<T> values, std::vector<Te> error
 /// 1-column series. clears the pool first so this is a full reset
 /// @param data  one series per outer vector
 /// @param names display name per series (auto-named if shorter than data)
-/// @param types 0 = line, 1 = bar per series (defaults to 0 if shorter)
+/// @param types type name per series, e.g. "line" or "bar" (defaults to line if shorter)
 inline void initSeriesPool(std::vector<std::vector<float>> data,
                            std::vector<std::string> names,
-                           std::vector<int> types) {
+                           std::vector<std::string> types) {
     pool.clear();
     pool.reserve(data.size());
     for (size_t i = 0; i < data.size(); ++i) {
         std::string n = i < names.size() ? names[i] : "series " + std::to_string(i);
-        int t = i < types.size() ? types[i] : 0;
-        pool.push_back({std::move(n), {std::move(data[i])}, {}, t, {}});
+        int t = i < types.size() ? parseSeriesType(types[i]) : parseSeriesType("line");
+        pool.push_back({std::move(n), {std::move(data[i])}, {}, t, resolveColor({})});
     }
 }
 
