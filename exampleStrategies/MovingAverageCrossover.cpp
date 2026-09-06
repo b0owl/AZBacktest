@@ -74,9 +74,9 @@ int main() {
     mainPaths.push_back(profit);
     for (auto& p : pctPaths) mainPaths.push_back(std::move(p));
 
-    addSeries("mc cloud", mcPaths, {}, "line", RGBA{0.4f, 0.4f, 0.4f, 0.3f});
-    addSeries("equity + percentiles", mainPaths,
-        {"actual", "p5", "p50", "p95"}, "line", RGBA{0.5f, 0.8f, 0.5f, 1.0f});
+    addLine("mc cloud", mcPaths, {}, RGBA{0.4f, 0.4f, 0.4f, 0.3f});
+    addLine("equity + percentiles", mainPaths,
+        {"actual", "p5", "p50", "p95"}, RGBA{0.5f, 0.8f, 0.5f, 1.0f});
 
     showConsole("Console", skins::toxic);
 }
