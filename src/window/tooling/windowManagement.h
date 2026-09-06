@@ -55,6 +55,8 @@ struct MovingWindowInfo {
     float w = 0, h = 0; // size in pixels
 };
 
+inline float workAreaTop();
+
 /// @brief the window being dragged this frame, resolved to its root since
 /// dragging a child moves the root, or nullptr when nothing is moving
 inline ImGuiWindow* movingWindowPtr() {
@@ -100,6 +102,11 @@ inline MovingWindowInfo holdMovingWindow() {
                  ? ImFloor(target.x / skins::gridStepX) * skins::gridStepX : target.x;
         dropAt.y = skins::gridStepY > 0.0f
                  ? ImFloor(target.y / skins::gridStepY) * skins::gridStepY : target.y;
+
+        // snapping down can land the outline under the menu bar, so clamp after
+        // it rather than before, otherwise the snap would undo the clamp
+        const float top = workAreaTop();
+        if (dropAt.y < top) dropAt.y = top;
         heldId = win->ID;
 
         ImGui::SetWindowPos(win, ImVec2(g->IO.MouseClickedPos[0].x - g->ActiveIdClickOffset.x,
@@ -183,6 +190,28 @@ inline bool snapResizingWindow() {
     ImGui::SetWindowPos(win, mn, ImGuiCond_Always);
     ImGui::SetWindowSize(win, size, ImGuiCond_Always);
     return true;
+}
+
+/// @brief top of the usable area, i.e. just under the main menu bar
+/// imgui shrinks the viewport work area by whatever BeginMainMenuBar took, so
+/// this follows the bar's real height instead of a hardcoded guess
+inline float workAreaTop() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    return vp ? vp->WorkPos.y : 0.0f;
+}
+
+inline void clampWindowsBelowMenuBar() {
+    ImGuiContext* g = ImGui::GetCurrentContext();
+    if (!g) return;
+    const float top = workAreaTop();
+
+    for (ImGuiWindow* win : g->Windows) {
+        if (!win || !win->WasActive) continue;
+        if (win->Flags & (ImGuiWindowFlags_ChildWindow | ImGuiWindowFlags_Tooltip
+                        | ImGuiWindowFlags_Popup | ImGuiWindowFlags_NoMove)) continue;
+        if (win->Pos.y < top)
+            ImGui::SetWindowPos(win, ImVec2(win->Pos.x, top), ImGuiCond_Always);
+    }
 }
 
 inline void endFrame(GLFWwindow* window) {
