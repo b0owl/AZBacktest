@@ -19,6 +19,7 @@
 #include "tooling/windowRendering.h"
 #include "tooling/panels.h"
 #include "tooling/widgets.h"
+#include "tooling/transforms.h"
 
 ///@name Panel Series API
 ///@{
@@ -68,6 +69,11 @@ windowManagement::MovingWindowInfo movingWindow;
 /// @param title window title (currently unused, window gets titled at creation)
 void showConsole(const char* title, void (skin)()) {
     static GLFWwindow* window = windowManagement::createWindow(skin);
+    // order matters: imgui writes .ini sections in registration order and reads
+    // them back the same way. transforms have to come first because they put
+    // their derived series into the pool, and panels resolve series by name
+    // while reading their own section
+    transformManagement::registerSettingsHandler();
     panelManagement::registerSettingsHandler();
     widgetManagement::registerSettingsHandler();
 
@@ -82,10 +88,11 @@ void showConsole(const char* title, void (skin)()) {
         windowManagement::startFrame();
         movingWindow = windowManagement::holdMovingWindow();
         windowManagement::snapResizingWindow();
-        windowManagement::clampWindowsBelowMenuBar();
+        windowManagement::clampWindowsToWorkArea();
 
         panelManagement::renderPanels();
         widgetManagement::renderWindows();
+        transformManagement::renderTransforms();
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::MenuItem("Chart")) {
                 std::string id = std::to_string(panelManagement::nextPanelId());
@@ -94,6 +101,10 @@ void showConsole(const char* title, void (skin)()) {
             }
             if (ImGui::MenuItem("Widget")) {
                 widgetManagement::newWindow(std::to_string(widgetManagement::nextWindowId()));
+            }
+            if (ImGui::MenuItem("Transform")) {
+                transformManagement::newTransform(
+                    std::to_string(transformManagement::nextTransformId()));
             }
 
             ImGui::EndMainMenuBar();

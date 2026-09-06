@@ -79,6 +79,8 @@ FILES=(
     "$SCRIPT_DIR/src/window/tooling/management.h"
     "$SCRIPT_DIR/src/window/tooling/panels.h"
     "$SCRIPT_DIR/src/window/tooling/widgets.h"
+    "$SCRIPT_DIR/src/window/tooling/formula.h"
+    "$SCRIPT_DIR/src/window/tooling/transforms.h"
     "$SCRIPT_DIR/src/window/tooling/windowManagement.h"
     "$SCRIPT_DIR/src/window/tooling/windowRendering.h"
     "$SCRIPT_DIR/src/skins/light.h"

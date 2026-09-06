@@ -34,6 +34,7 @@ inline bool renderAddWidgetPopup(WidgetWindow& w) {
     return false;
 }
 
+
 /// @brief the series explorer widget, lets you pick a series from the pool
 /// and inspect its values in a scrollable table with per-column stats
 /// handles both 1D and multi-column series

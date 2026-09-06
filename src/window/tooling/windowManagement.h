@@ -154,9 +154,41 @@ inline ResizeEdges activeResizeEdges(ImGuiWindow* win) {
     return e;
 }
 
-/// @brief pull the edges of a window being resized onto the grid
-/// only the edges the active handle actually drives get snapped, so dragging the
-/// right border never nudges the left one, and a step of zero leaves that axis free
+/// @brief pull one axis of a rect onto the grid so it spans whole cells
+///
+/// both edges land on a grid line, which is what makes the window a whole number
+/// of squares rather than merely having the dragged edge aligned. the edge under
+/// the cursor floors onto a line so it tracks the drag, the opposite edge rounds
+/// to the nearest one, a no-op once a window is aligned and a one time
+/// correction while it isn't
+///
+/// the span is then widened to at least one cell, and to imgui's own minimum
+/// rounded up to a whole number of cells, growing away from the dragged edge so
+/// the edge being held stays put
+/// @param step <=0 leaves this axis alone entirely
+inline void snapAxisToGrid(float& lo, float& hi, float step,
+                           bool loDriven, bool hiDriven, float minSpan) {
+    if (step <= 0.0f) return;
+
+    lo = loDriven ? ImFloor(lo / step) * step : IM_ROUND(lo / step) * step;
+    hi = hiDriven ? ImFloor(hi / step) * step : IM_ROUND(hi / step) * step;
+
+    float cells = ImFloor(minSpan / step);
+    if (cells * step < minSpan) cells += 1.0f;  // round the minimum up, never down
+    if (cells < 1.0f) cells = 1.0f;             // never collapse to nothing
+
+    const float span = cells * step;
+    if (hi - lo < span) {
+        if (loDriven) lo = hi - span;
+        else          hi = lo + span;
+    }
+}
+
+/// @brief pull a window being resized onto the grid, so it always ends up
+/// covering a whole number of grid squares rather than part of one
+/// every edge lands on a grid line, not just the one under the cursor, which is
+/// what forces the size itself to be a multiple of the step. a step of zero
+/// leaves that axis free
 /// call once per frame after startFrame(), same as holdMovingWindow()
 /// @return true while a resize is being snapped
 inline bool snapResizingWindow() {
@@ -170,25 +202,12 @@ inline bool snapResizingWindow() {
     ImVec2 mn = win->Pos;
     ImVec2 mx = ImVec2(win->Pos.x + win->SizeFull.x, win->Pos.y + win->SizeFull.y);
 
-    const float sx = skins::gridStepX, sy = skins::gridStepY;
-    if (sx > 0.0f) {
-        if (e.left)  mn.x = ImFloor(mn.x / sx) * sx;
-        if (e.right) mx.x = ImFloor(mx.x / sx) * sx;
-    }
-    if (sy > 0.0f) {
-        if (e.up)   mn.y = ImFloor(mn.y / sy) * sy;
-        if (e.down) mx.y = ImFloor(mx.y / sy) * sy;
-    }
-
-    // never snap below imgui's own minimum. when it's a left or top edge being
-    // dragged the position has to give way, otherwise the window would creep
-    ImVec2 size(mx.x - mn.x, mx.y - mn.y);
     const ImVec2 minSize = ImGui::GetStyle().WindowMinSize;
-    if (size.x < minSize.x) { size.x = minSize.x; if (e.left) mn.x = mx.x - size.x; }
-    if (size.y < minSize.y) { size.y = minSize.y; if (e.up)   mn.y = mx.y - size.y; }
+    snapAxisToGrid(mn.x, mx.x, skins::gridStepX, e.left, e.right, minSize.x);
+    snapAxisToGrid(mn.y, mx.y, skins::gridStepY, e.up,   e.down,  minSize.y);
 
     ImGui::SetWindowPos(win, mn, ImGuiCond_Always);
-    ImGui::SetWindowSize(win, size, ImGuiCond_Always);
+    ImGui::SetWindowSize(win, ImVec2(mx.x - mn.x, mx.y - mn.y), ImGuiCond_Always);
     return true;
 }
 
@@ -200,17 +219,36 @@ inline float workAreaTop() {
     return vp ? vp->WorkPos.y : 0.0f;
 }
 
-inline void clampWindowsBelowMenuBar() {
+/// @brief keep every top level window fully inside the usable area
+inline void clampWindowsToWorkArea() {
     ImGuiContext* g = ImGui::GetCurrentContext();
     if (!g) return;
-    const float top = workAreaTop();
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    if (!vp) return;
+
+    const ImVec2 wmin = vp->WorkPos;
+    const ImVec2 wmax = ImVec2(vp->WorkPos.x + vp->WorkSize.x,
+                               vp->WorkPos.y + vp->WorkSize.y);
 
     for (ImGuiWindow* win : g->Windows) {
         if (!win || !win->WasActive) continue;
+        // the menu bar sits above the work area by definition, and popups,
+        // tooltips and children are placed by their parent, not by the user
         if (win->Flags & (ImGuiWindowFlags_ChildWindow | ImGuiWindowFlags_Tooltip
                         | ImGuiWindowFlags_Popup | ImGuiWindowFlags_NoMove)) continue;
-        if (win->Pos.y < top)
-            ImGui::SetWindowPos(win, ImVec2(win->Pos.x, top), ImGuiCond_Always);
+
+        // the lower bound wins when the window is bigger than the work area, so
+        // an oversized window parks at the top left instead of going negative
+        float x = win->Pos.x, y = win->Pos.y;
+        const float maxX = wmax.x - win->Size.x;
+        const float maxY = wmax.y - win->Size.y;
+        if (x > maxX)   x = maxX;
+        if (x < wmin.x) x = wmin.x;
+        if (y > maxY)   y = maxY;
+        if (y < wmin.y) y = wmin.y;
+
+        if (x != win->Pos.x || y != win->Pos.y)
+            ImGui::SetWindowPos(win, ImVec2(x, y), ImGuiCond_Always);
     }
 }
 
