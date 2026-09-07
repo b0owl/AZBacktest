@@ -9,34 +9,44 @@
 #include "../src/skins/toxic.h"
 
 int main() {
-    // prices has to outlive handler, which holds a reference to it
     loadConfig();
+
+    // Handling reads prices.back() as "the price right now", so this vector only
+    // ever holds the bar being processed
     std::vector<float> prices;
     MarketData md(kCSVMapping.path);
     Handling handler(prices, 0.25f, 0.50f);
 
-    handler.fetchEOF(60);
-    int batchSize = 500;
-    for (int i = 0; ++i;) {
-        auto window = handler.requestDataWindow(md, batchSize, 60);
+    const int timeframe = 60;   // seconds per bar
+    const int batchSize = 500;  // rows per read, an io detail, not a strategy knob
+
+    handler.fetchEOF(timeframe);
+
+    int bar = 0;
+    for (;;) {
+        DataWindow window = handler.requestDataWindow(md, batchSize, timeframe);
         if (window.prices.empty()) break;
-        prices = std::move(window.prices);
 
-        for (int b = 0; b < (int)prices.size(); b++) {
-            if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << handler.eof << std::endl; }
+        for (std::size_t b = 0; b < window.prices.size(); b++, bar++) {
+            if (bar % 5000 == 0)
+                std::cout << "  bar " << bar << " / " << handler.eof << std::endl;
 
-            handler.openLong(i);
+            prices.assign(1, window.prices[b]);
 
-            float saved = prices.back();
-            prices.back() = prices[b];
+            // mark the open trade to this bar and stamp the equity curve. the
+            // timestamp matters, without it trades close at epoch 0 and anything
+            // time bucketed downstream collapses into one bucket
             handler.tick(handler.windowTimestamps[b]);
-            prices.back() = saved;
+
+            // buy the first bar, then just sit in it until closeAll below
+            if (!handler.inLong) handler.openLong(bar);
         }
     }
     handler.closeAll();
 
     auto profit = returnProfitOverTime(1440);
-    addLine("equity", std::vector<std::vector<float>>{profit}, {"actual"}, RGBA{0.5f, 0.8f, 0.5f, 1.0f});
+    addLine("equity", std::vector<std::vector<float>>{profit}, {"actual"},
+            RGBA{0.5f, 0.8f, 0.5f, 1.0f});
 
     showConsole("Console", skins::dark);
 }
