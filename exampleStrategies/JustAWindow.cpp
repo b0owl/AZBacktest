@@ -1,10 +1,8 @@
 // not a strategy, just a window for style-dev purposes
 // also good for understanding the gui api
 
-#include <iostream>
 #include <vector>
 
-#include "../src/backtestApi.h"
 #include "../src/initSeries.h"
 #include "../src/window/window.h"
 #include "../src/skins/light.h"

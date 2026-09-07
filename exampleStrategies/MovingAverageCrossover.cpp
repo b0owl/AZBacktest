@@ -9,66 +9,80 @@
 #include "../src/skins/toxic.h"
 
 int main() {
-    // prices has to outlive handler, which holds a reference to it
     loadConfig();
+
+    // Handling reads prices.back() as "the price right now", so this vector only
+    // ever holds the bar being processed. indicator history is kept separately
     std::vector<float> prices;
     MarketData md(kCSVMapping.path);
     Handling handler(prices, 0.25f, 0.50f);
 
-    int shortPeriod = 100;
-    int longPeriod  = 200;
+    const int   shortPeriod = 100;
+    const int   longPeriod  = 200;
+    const float takeProfit  = 500.f;
+    const float stopLoss    = 50.f;
 
-    float takeProfit = 500.f;
-    float stopLoss   = 50.f;
+    const int timeframe = 60;   // seconds per bar
+    const int batchSize = 500;  // rows per read, an io detail, not a strategy knob
 
-    handler.fetchEOF(60);
+    handler.fetchEOF(timeframe);
 
-    int batchSize = 500;
-    for (int i = 0; ++i;) {
-        auto window = handler.requestDataWindow(md, batchSize, 60);
+    // trailing window of closes, capped at longPeriod so the work per bar is flat
+    // rather than growing with the length of the backtest
+    std::vector<float> history;
+    history.reserve(longPeriod);
+
+    int bar = 0;
+    for (;;) {
+        DataWindow window = handler.requestDataWindow(md, batchSize, timeframe);
         if (window.prices.empty()) break;
-        prices = std::move(window.prices);
 
-        if ((int)prices.size() < (longPeriod * 2)) continue;
+        for (std::size_t b = 0; b < window.prices.size(); b++, bar++) {
+            if (bar % 5000 == 0)
+                std::cout << "  bar " << bar << " / " << handler.eof << std::endl;
 
-        PriceAnalytics pa(prices);
-        float shortMaVal = pa.returnSimpleMovingAverage(shortPeriod).back();
-        float longMaVal  = pa.returnSimpleMovingAverage(longPeriod).back();
+            // this bar is now the current price, and joins the trailing history
+            prices.assign(1, window.prices[b]);
+            history.push_back(window.prices[b]);
+            if ((int)history.size() > longPeriod) history.erase(history.begin());
 
-        bool shortAboveLong = shortMaVal > longMaVal;
-        bool shortBelowLong = shortMaVal < longMaVal;
+            // mark the open trade to this bar and stamp the equity curve. the
+            // timestamp matters, without it trades close at epoch 0 and anything
+            // time bucketed downstream collapses into one bucket
+            handler.tick(handler.windowTimestamps[b]);
 
-        for (int b = 0; b < (int)prices.size(); b++) {
-            if (i % 5000 == 0) { std::cout << "  bar " << i << " / " << handler.eof << std::endl; }
-
-            float saved = prices.back();
-            prices.back() = prices[b];
-            handler.tick();
-
-            // tp/sl
+            // risk first, so a runner gets cut before any signal work
             if (handler.openTrade) {
-                float pnl = handler.openTrade->td.profit;
+                const float pnl = handler.openTrade->td.profit;
                 if (pnl >= takeProfit || pnl <= -stopLoss) handler.closeTrade();
             }
 
-            // exits first so we can immediately flip into the opposite side
-            if (handler.inLong && shortBelowLong)  handler.closeTrade();
-            if (handler.inShort && shortAboveLong) handler.closeTrade();
+            if ((int)history.size() < longPeriod) continue; // not enough history yet
 
-            // entries
-            if (!handler.inLong && shortAboveLong)  handler.openLong(i);
-            if (!handler.inShort && shortBelowLong) handler.openShort(i);
+            // recomputed every bar from closes up to and including this one, so a
+            // signal can never be built out of prices that haven't happened
+            PriceAnalytics pa(history);
+            const float shortMa = pa.returnSimpleMovingAverage(shortPeriod).back();
+            const float longMa  = pa.returnSimpleMovingAverage(longPeriod).back();
 
-            prices.back() = saved;
+            const bool shortAbove = shortMa > longMa;
+            const bool shortBelow = shortMa < longMa;
+
+            // exits first so we can flip straight into the opposite side
+            if (handler.inLong  && shortBelow) handler.closeTrade();
+            if (handler.inShort && shortAbove) handler.closeTrade();
+
+            if (!handler.inLong  && shortAbove) handler.openLong(bar);
+            if (!handler.inShort && shortBelow) handler.openShort(bar);
         }
     }
     handler.closeAll();
 
     // monte carlo (daily bucketed)
-    int mcSims = 60;
-    auto mcPaths = returnMonteCarlo(mcSims, 5, 86400);
+    const int mcSims = 60;
+    auto mcPaths  = returnMonteCarlo(mcSims, 5, 86400);
     auto pctPaths = returnPercentilePaths(mcPaths, {5, 50, 95});
-    auto profit = returnCumProfitBucketed(86400);
+    auto profit   = returnCumProfitBucketed(86400);
 
     std::vector<std::vector<float>> mainPaths;
     mainPaths.push_back(profit);
