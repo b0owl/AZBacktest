@@ -74,13 +74,13 @@ inline int getInt(const Table& t, const std::string& section,
     try { return std::stoi(kit->second); } catch (...) { return def; }
 }
 
-inline float getFloat(const Table& t, const std::string& section,
-                      const std::string& key, float def = 0.f) {
+inline double getFloat(const Table& t, const std::string& section,
+                       const std::string& key, double def = 0.0) {
     auto sit = t.find(section);
     if (sit == t.end()) return def;
     auto kit = sit->second.find(key);
     if (kit == sit->second.end()) return def;
-    try { return std::stof(kit->second); } catch (...) { return def; }
+    try { return std::stod(kit->second); } catch (...) { return def; }
 }
 
 inline bool getBool(const Table& t, const std::string& section,

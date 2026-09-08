@@ -54,13 +54,13 @@
 struct Tick {
     std::string_view timestamp;
     std::string_view price;
-    float size = 0.f;
+    double size = 0.0;
     const char* side = kCSVMapping.unknownSideAggressorAlias;
-    float executedBuys   = 0.f;
-    float executedSells  = 0.f;
-    float unknownVolume  = 0.f;
-    float restingBids    = 0.f;
-    float restingAsks    = 0.f;
+    double executedBuys   = 0.0;
+    double executedSells  = 0.0;
+    double unknownVolume  = 0.0;
+    double restingBids    = 0.0;
+    double restingAsks    = 0.0;
 };
 
 namespace mdDetail {
@@ -286,7 +286,7 @@ inline void nFields(const char* start, const char* end, const int* cols, int n,
 /// @brief parse a field into `dst`, leaving it untouched if the column wasn't
 /// configured or the row didn't have it. keeps the "0 when disabled" default
 /// that Tick's resting sizes rely on
-inline void parseOptionalFloat(std::string_view v, float& dst) {
+inline void parseOptionalFloat(std::string_view v, double& dst) {
     if (v.empty()) return;
     std::from_chars(v.data(), v.data() + v.size(), dst);
 }
@@ -441,14 +441,14 @@ public:
         std::string targetOwned  = mdDetail::endTimestamp(firstTs, seconds);
         std::string_view target(targetOwned);
 
-        float barVolume = 0.f, buys = 0.f, sells = 0.f, unknown = 0.f;
+        double barVolume = 0.0, buys = 0.0, sells = 0.0, unknown = 0.0;
         // the row's side alias, or nullptr when side classification is disabled
         const char* rowSide = nullptr;
 
         // parse one row's size and fold it into the running per-side totals
         auto accumulate = [&](const char* l, const char* e) {
             std::string_view szView = mdDetail::field(l, e, kCSVMapping.sizeCol);
-            float sz = 0.f;
+            double sz = 0.0;
             std::from_chars(szView.data(), szView.data() + szView.size(), sz);
             barVolume += sz;
 

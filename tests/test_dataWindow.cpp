@@ -29,8 +29,8 @@ TEST(tickModeReturnsEveryRow) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 10);
 
     CHECK_EQ(w.prices.size(), (std::size_t)6);
@@ -42,13 +42,13 @@ TEST(tickModeParsesPricesAndVolumes) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 10);
     REQUIRE(w.prices.size() == 6);
 
-    const float wantPx[6]  = {5000.25f, 5000.50f, 5000.75f, 5001.00f, 5000.50f, 5000.25f};
-    const float wantVol[6] = {3, 7, 2, 5, 4, 6};
+    const double wantPx[6]  = {5000.25, 5000.50, 5000.75, 5001.00, 5000.50, 5000.25};
+    const double wantVol[6] = {3, 7, 2, 5, 4, 6};
     for (int i = 0; i < 6; i++) {
         CHECK_F(w.prices[i],  wantPx[i]);
         CHECK_F(w.volumes[i], wantVol[i]);
@@ -60,13 +60,13 @@ TEST(tickModeCarriesRestingBookThrough) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 10);
     REQUIRE(w.restingBids.size() == 6);
 
-    const float wantBid[6] = {40, 41, 45, 60, 61, 30};
-    const float wantAsk[6] = {55, 52, 50, 20, 19, 33};
+    const double wantBid[6] = {40, 41, 45, 60, 61, 30};
+    const double wantAsk[6] = {55, 52, 50, 20, 19, 33};
     for (int i = 0; i < 6; i++) {
         CHECK_F(w.restingBids[i], wantBid[i]);
         CHECK_F(w.restingAsks[i], wantAsk[i]);
@@ -82,15 +82,15 @@ TEST(tickModeRestingVectorsStayParallelWhenUnmapped) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 10);
 
     checkParallelLengths(w);
     CHECK_EQ(w.restingBids.size(), (std::size_t)6);
     for (std::size_t i = 0; i < w.restingBids.size(); i++) {
-        CHECK_F(w.restingBids[i], 0.f);
-        CHECK_F(w.restingAsks[i], 0.f);
+        CHECK_F(w.restingBids[i], 0.0);
+        CHECK_F(w.restingAsks[i], 0.0);
     }
 }
 
@@ -99,13 +99,13 @@ TEST(tickModeSplitsVolumeByAggressor) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 10);
     REQUIRE(w.prices.size() == 6);
 
-    const float wantBuys[6]  = {3, 0, 0, 5, 0, 6};
-    const float wantSells[6] = {0, 7, 0, 0, 4, 0};
+    const double wantBuys[6]  = {3, 0, 0, 5, 0, 6};
+    const double wantSells[6] = {0, 7, 0, 0, 4, 0};
     for (int i = 0; i < 6; i++) {
         CHECK_F(w.executedBuys[i],  wantBuys[i]);
         CHECK_F(w.executedSells[i], wantSells[i]);
@@ -120,17 +120,17 @@ TEST(deltasAreOrderflowDelta) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 10);
     REQUIRE(w.deltas.size() == 6);
 
-    CHECK_F(w.deltas[0],  3.f);    // B size=3: 3-0
-    CHECK_F(w.deltas[1], -7.f);    // A size=7: 0-7
-    CHECK_F(w.deltas[2],  0.f);    // X size=2: 0-0 (unknown)
-    CHECK_F(w.deltas[3],  5.f);    // B size=5: 5-0
-    CHECK_F(w.deltas[4], -4.f);    // A size=4: 0-4
-    CHECK_F(w.deltas[5],  6.f);    // B size=6: 6-0
+    CHECK_F(w.deltas[0],  3.0);    // B size=3: 3-0
+    CHECK_F(w.deltas[1], -7.0);    // A size=7: 0-7
+    CHECK_F(w.deltas[2],  0.0);    // X size=2: 0-0 (unknown)
+    CHECK_F(w.deltas[3],  5.0);    // B size=5: 5-0
+    CHECK_F(w.deltas[4], -4.0);    // A size=4: 0-4
+    CHECK_F(w.deltas[5],  6.0);    // B size=6: 6-0
 }
 
 // orderflow delta is self-contained per tick, so batching doesn't matter
@@ -140,8 +140,8 @@ TEST(deltasAreConsistentAcrossBatches) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
 
     auto first = h.requestDataWindow(md, 3);
     REQUIRE(first.prices.size() == 3);
@@ -150,7 +150,7 @@ TEST(deltasAreConsistentAcrossBatches) {
     auto second = h.requestDataWindow(md, 3);
     REQUIRE(second.prices.size() == 3);
     // second batch row 0 is B size=5: delta = 5
-    CHECK_F(second.deltas[0], 5.f);
+    CHECK_F(second.deltas[0], 5.0);
 }
 
 TEST(periodLongerThanFileStopsAtEof) {
@@ -158,8 +158,8 @@ TEST(periodLongerThanFileStopsAtEof) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 500);
 
     CHECK_EQ(w.prices.size(), (std::size_t)6);
@@ -171,8 +171,8 @@ TEST(windowTimestampsAreParallelToPrices) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 10);
 
     CHECK_EQ(h.windowTimestamps.size(), w.prices.size());
@@ -188,18 +188,18 @@ TEST(tickResKeepsEveryNthTick) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 3, 0, [](){}, 2);
 
     REQUIRE(w.prices.size() == 3);
     // rows 1, 3 and 5 survive, rows 0/2/4 get read and thrown away
-    CHECK_F(w.prices[0], 5000.50f);
-    CHECK_F(w.prices[1], 5001.00f);
-    CHECK_F(w.prices[2], 5000.25f);
-    CHECK_F(w.restingBids[0], 41.f);
-    CHECK_F(w.restingBids[1], 60.f);
-    CHECK_F(w.restingBids[2], 30.f);
+    CHECK_F(w.prices[0], 5000.50);
+    CHECK_F(w.prices[1], 5001.00);
+    CHECK_F(w.prices[2], 5000.25);
+    CHECK_F(w.restingBids[0], 41.0);
+    CHECK_F(w.restingBids[1], 60.0);
+    CHECK_F(w.restingBids[2], 30.0);
     checkParallelLengths(w);
 }
 
@@ -212,8 +212,8 @@ TEST(whenUnknownFiresForUnclassifiableVolume) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     unknownHits = 0;
     h.requestDataWindow(md, 10, 0, [](){ unknownHits++; });
 
@@ -227,8 +227,8 @@ TEST(whenUnknownNeverFiresWhenEverySideClassifies) {
         "2025-06-01T22:00:10.000000000Z,ESM5,5000.50,7,A,41,52\n");
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     unknownHits = 0;
     h.requestDataWindow(md, 10, 0, [](){ unknownHits++; });
 
@@ -242,16 +242,16 @@ TEST(barModeAggregatesVolumePerBar) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 10, 60);
 
     REQUIRE(w.prices.size() == 2);
     checkParallelLengths(w);
-    CHECK_F(w.volumes[0], 17.f);
-    CHECK_F(w.volumes[1], 10.f);
-    CHECK_F(w.prices[0], 5001.00f);
-    CHECK_F(w.prices[1], 5000.25f);
+    CHECK_F(w.volumes[0], 17.0);
+    CHECK_F(w.volumes[1], 10.0);
+    CHECK_F(w.prices[0], 5001.00);
+    CHECK_F(w.prices[1], 5000.25);
 }
 
 TEST(barModeSumsAggressorSplit) {
@@ -259,15 +259,15 @@ TEST(barModeSumsAggressorSplit) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 10, 60);
 
     REQUIRE(w.prices.size() == 2);
-    CHECK_F(w.executedBuys[0],  8.f);
-    CHECK_F(w.executedSells[0], 7.f);
-    CHECK_F(w.executedBuys[1],  6.f);
-    CHECK_F(w.executedSells[1], 4.f);
+    CHECK_F(w.executedBuys[0],  8.0);
+    CHECK_F(w.executedSells[0], 7.0);
+    CHECK_F(w.executedBuys[1],  6.0);
+    CHECK_F(w.executedSells[1], 4.0);
 }
 
 // unlike volume, resting size is a snapshot, so a bar reports the closing
@@ -277,15 +277,15 @@ TEST(barModeRestingSizesAreTheClosingSnapshot) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 10, 60);
 
     REQUIRE(w.prices.size() == 2);
-    CHECK_F(w.restingBids[0], 60.f);
-    CHECK_F(w.restingAsks[0], 20.f);
-    CHECK_F(w.restingBids[1], 30.f);
-    CHECK_F(w.restingAsks[1], 33.f);
+    CHECK_F(w.restingBids[0], 60.0);
+    CHECK_F(w.restingAsks[0], 20.0);
+    CHECK_F(w.restingBids[1], 30.0);
+    CHECK_F(w.restingAsks[1], 33.0);
 }
 
 TEST(barModeDeltasAreOrderflowDelta) {
@@ -293,11 +293,11 @@ TEST(barModeDeltasAreOrderflowDelta) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    std::vector<float> prices;
-    Handling h(prices, 0.25f, 12.5f, false);
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 10, 60);
 
     REQUIRE(w.deltas.size() == 2);
-    CHECK_F(w.deltas[0],  1.f);      // bar1: buys=8, sells=7 -> 1
-    CHECK_F(w.deltas[1],  2.f);      // bar2: buys=6, sells=4 -> 2
+    CHECK_F(w.deltas[0],  1.0);      // bar1: buys=8, sells=7 -> 1
+    CHECK_F(w.deltas[1],  2.0);      // bar2: buys=6, sells=4 -> 2
 }

@@ -32,7 +32,7 @@
 /// @brief result of a single closed trade, profit, win/loss, and when it closed
 /// gets pushed into the global `trades` vec when a Trade is locked
 struct tradeData {
-    float profit; // pts
+    double profit; // pts
     bool win;
     long long closeEpochSec = 0; // set by Handling on close
 };
@@ -44,8 +44,8 @@ std::vector<tradeData> trades;
 /// @brief timestamped equity snapshots (realized + open P&L), populated by
 /// Handling::tick() whenever a timestamp is fed in; consumed by
 /// returnProfitOverTime for bucketing into bars
-std::vector<std::pair<long long, float>> equityCurve;
-float realizedProfit = 0.f;
+std::vector<std::pair<long long, double>> equityCurve;
+double realizedProfit = 0.0;
 
 /// @brief which side a trade is on, flips the sign on P&L math
 enum class TradeDirection { Long, Short };
@@ -62,20 +62,20 @@ enum class TradeDirection { Long, Short };
 /// every vector here is the same length and indexed the same way, so
 /// executedBuys[i] always belongs to prices[i]
 struct DataWindow {
-    std::vector<float> prices;
-    std::vector<float> volumes;
-    std::vector<float> executedBuys;  // volume that lifted the ask (buy aggressor)
-    std::vector<float> executedSells; // volume that hit the bid (sell aggressor)
-    std::vector<float> deltas;
-    std::vector<float> restingBids;   // volume resting on the bid
-    std::vector<float> restingAsks;   // volume resting on the ask
+    std::vector<double> prices;
+    std::vector<double> volumes;
+    std::vector<double> executedBuys;  // volume that lifted the ask (buy aggressor)
+    std::vector<double> executedSells; // volume that hit the bid (sell aggressor)
+    std::vector<double> deltas;
+    std::vector<double> restingBids;   // volume resting on the bid
+    std::vector<double> restingAsks;   // volume resting on the ask
 };
 
 class Trade {
 private:
-    float _entryPrice;
-    float _tickValue;
-    float _tickSize;
+    double _entryPrice;
+    double _tickValue;
+    double _tickSize;
     int _entryIdx;
     TradeDirection _direction;
 
@@ -86,7 +86,7 @@ public:
     /// @param entryPrice price at which the trade was opened (snapshot; no reference)
     /// @param entryIdx bar index where the trade was opened (for your own bookkeeping)
     /// @param direction Long or Short, flips the sign on P&L
-    Trade(float entryPrice, int entryIdx, float tickSize, float tickValue, TradeDirection direction)
+    Trade(double entryPrice, int entryIdx, double tickSize, double tickValue, TradeDirection direction)
         : _entryPrice(entryPrice)
         , _tickValue(tickValue)
         , _tickSize(tickSize)
@@ -97,9 +97,9 @@ public:
     tradeData td;
 
     /// @brief update P&L to reflect `currentPrice` (call once per bar while open)
-    tradeData advanceIdx(float currentPrice) {
+    tradeData advanceIdx(double currentPrice) {
         if (!_lockTrade) {
-            float diff = (currentPrice - _entryPrice) / _tickSize * _tickValue;
+            double diff = (currentPrice - _entryPrice) / _tickSize * _tickValue;
             td.profit = (_direction == TradeDirection::Long) ? diff : -diff;
             td.win = td.profit > 0;
         }
@@ -119,9 +119,9 @@ public:
 // TODO - OVERLAPPING TRADES SUPPORT
 class Handling {
 private:
-    std::vector<float>& _prices;
-    float _tickSize;
-    float _tickValue;
+    std::vector<double>& _prices;
+    double _tickSize;
+    double _tickValue;
 
     bool _calculateCosts;
 
@@ -141,7 +141,7 @@ public:
     /// @param prices    live price window; Handling reads `.back()` at each entry
     /// @param tickSize  instrument tick size, forwarded to Trade
     /// @param tickValue instrument tick value, forwarded to Trade
-    Handling(std::vector<float>& prices, float tickSize, float tickValue, bool calculateCosts = true)
+    Handling(std::vector<double>& prices, double tickSize, double tickValue, bool calculateCosts = true)
         : _prices(prices), _tickSize(tickSize), _tickValue(tickValue), _calculateCosts(calculateCosts) {}
 
     // Trade management
@@ -199,8 +199,8 @@ public:
     std::pair<bool,bool> tick(long long epochSec) {
         if (openTrade) openTrade->advanceIdx(_prices.back());
         lastEpochSec = epochSec;
-        float unreal = openTrade ? openTrade->td.profit : 0.f;
-        float eq = realizedProfit + unreal;
+        double unreal = openTrade ? openTrade->td.profit : 0.0;
+        double eq = realizedProfit + unreal;
         if (!equityCurve.empty() && equityCurve.back().first == epochSec) {
             equityCurve.back().second = eq;
         } else {
@@ -249,7 +249,7 @@ public:
                     if (!tick) break;
                 }
                 if (!tick) break;
-                float px = 0.f;
+                double px = 0.0;
                 std::from_chars(tick->price.data(), tick->price.data() + tick->price.size(), px);
                 out.prices.push_back(px);
                 out.deltas.push_back(tick->executedBuys - tick->executedSells);
@@ -260,7 +260,7 @@ public:
                 // with prices/volumes (a tick with no usable side contributes 0 to both)
                 out.executedBuys.push_back(tick->executedBuys);
                 out.executedSells.push_back(tick->executedSells);
-                if (tick->unknownVolume > 0.f) whenUnknown(); // custom behavior hook for
+                if (tick->unknownVolume > 0.0) whenUnknown(); // custom behavior hook for
                                                              // unclassifiable volume
 
                 // book snapshot at this tick, 0 across the board when the resting
@@ -274,7 +274,7 @@ public:
             for (int i=0; i<period; i+=tickRes) {
                 auto bar = md.nextClose(timeframe);
                 if (!bar) break;
-                float px = 0.f;
+                double px = 0.0;
                 std::from_chars(bar->price.data(), bar->price.data() + bar->price.size(), px);
                 out.prices.push_back(px);
                 out.deltas.push_back(bar->executedBuys - bar->executedSells);
@@ -284,7 +284,7 @@ public:
                 // per-bar aggressor split, summed across every tick in the bar
                 out.executedBuys.push_back(bar->executedBuys);
                 out.executedSells.push_back(bar->executedSells);
-                if (bar->unknownVolume > 0.f) whenUnknown();
+                if (bar->unknownVolume > 0.0) whenUnknown();
 
                 // closing tick's book, not a bar aggregate, see DataWindow
                 out.restingBids.push_back(bar->restingBids);
@@ -341,30 +341,30 @@ public:
 /// @param tickValue self explanatory
 class SetAnalytics {
 private:
-    std::vector<float> data;   
+    std::vector<double> data;   
 
 public:
-    SetAnalytics(std::vector<float> data) : data(data) {}
+    SetAnalytics(std::vector<double> data) : data(data) {}
 
 
-    void updateVector(float newData) { data.push_back(newData); }
+    void updateVector(double newData) { data.push_back(newData); }
     void clearOutVector(int maxSize) { if (data.size() > maxSize) data.erase(data.begin()); }
 
     /// @brief rolling moving average over the tail end of `data`, uses the last
     /// period*2 values so you get `period` output points (one per point after warmup)
     /// `data` needs a length of at least period*2, only the tail gets touched
     /// @param period lookback length
-    std::vector<float> returnRollingMovingAverage(int period) {
+    std::vector<double> returnRollingMovingAverage(int period) {
         if ((int)data.size() < period * 2) return {};
-        std::vector<float> requiredChunk(data.end() - (period*2), data.end());
-        std::vector<float> avgOverTime;
+        std::vector<double> requiredChunk(data.end() - (period*2), data.end());
+        std::vector<double> avgOverTime;
 
-        float sum = 0;
+        double sum = 0;
         for (int i = 0; i < requiredChunk.size(); i++) {
             sum += requiredChunk[i];
             if (i >= period) {
                 sum -= requiredChunk[i - period];
-                avgOverTime.push_back(sum / static_cast<float>(period));
+                avgOverTime.push_back(sum / static_cast<double>(period));
             }
         }
         return avgOverTime;
@@ -372,27 +372,27 @@ public:
 
     /// @brief population standard deviation over the whole set, one scalar
     /// use returnRollingStandardDeviation if you want a value per point instead
-    float returnStandardDeviation() {
-        if (data.size() < 2) return 0.f;
+    double returnStandardDeviation() {
+        if (data.size() < 2) return 0.0;
 
         double sum = 0.0;
-        for (float v : data) sum += v;
+        for (double v : data) sum += v;
         double mean = sum / static_cast<double>(data.size());
 
         double sqDiff = 0.0;
-        for (float v : data) { double d = v - mean; sqDiff += d * d; }
+        for (double v : data) { double d = v - mean; sqDiff += d * d; }
 
-        return static_cast<float>(std::sqrt(sqDiff / static_cast<double>(data.size())));
+        return static_cast<double>(std::sqrt(sqDiff / static_cast<double>(data.size())));
     }
 
     /// @brief rolling population standard deviation, same tail-slice convention as
     /// returnRollingMovingAverage so the outputs line up index for index with it
     /// accumulators are doubles since sumSq cancellation gets ugly on price-scale floats
     /// @param period lookback length
-    std::vector<float> returnRollingStandardDeviation(int period) {
+    std::vector<double> returnRollingStandardDeviation(int period) {
         if ((int)data.size() < period * 2) return {};
-        std::vector<float> requiredChunk(data.end() - (period*2), data.end());
-        std::vector<float> stdDevOverTime;
+        std::vector<double> requiredChunk(data.end() - (period*2), data.end());
+        std::vector<double> stdDevOverTime;
 
         double sum = 0.0, sumSq = 0.0;
         for (int i = 0; i < requiredChunk.size(); i++) {
@@ -405,7 +405,7 @@ public:
                 double mean = sum / static_cast<double>(period);
                 double variance = sumSq / static_cast<double>(period) - mean * mean;
                 if (variance < 0.0) variance = 0.0; // fp noise on a flat window
-                stdDevOverTime.push_back(static_cast<float>(std::sqrt(variance)));
+                stdDevOverTime.push_back(static_cast<double>(std::sqrt(variance)));
             }
         }
         return stdDevOverTime;
@@ -415,10 +415,10 @@ public:
     /// the mean of its own trailing window, same tail-slice convention as the others
     /// a flat window (zero stddev) yields 0 rather than a div by zero
     /// @param period lookback length
-    std::vector<float> returnRollingZScore(int period) {
+    std::vector<double> returnRollingZScore(int period) {
         if ((int)data.size() < period * 2) return {};
-        std::vector<float> requiredChunk(data.end() - (period*2), data.end());
-        std::vector<float> zOverTime;
+        std::vector<double> requiredChunk(data.end() - (period*2), data.end());
+        std::vector<double> zOverTime;
 
         double sum = 0.0, sumSq = 0.0;
         for (int i = 0; i < requiredChunk.size(); i++) {
@@ -434,8 +434,8 @@ public:
                 double stdDev = std::sqrt(variance);
 
                 zOverTime.push_back(stdDev > 0.0
-                    ? static_cast<float>((requiredChunk[i] - mean) / stdDev)
-                    : 0.f);
+                    ? static_cast<double>((requiredChunk[i] - mean) / stdDev)
+                    : 0.0);
             }
         }
         return zOverTime;
@@ -444,18 +444,18 @@ public:
 
 class PriceAnalytics {
 private:
-    std::vector<float> prices;
-    std::vector<float> volume;
+    std::vector<double> prices;
+    std::vector<double> volume;
 
 public:
-    PriceAnalytics(std::vector<float> prices={}, std::vector<float> volume={}) : prices(prices), volume(volume) {}
+    PriceAnalytics(std::vector<double> prices={}, std::vector<double> volume={}) : prices(prices), volume(volume) {}
 
-    void updatePrices(float price, float vol = 0.f) { prices.push_back(price); volume.push_back(vol); }
+    void updatePrices(double price, double vol = 0.0) { prices.push_back(price); volume.push_back(vol); }
     void trimPrices(int maxSize) {
         if ((int)prices.size() > maxSize) { prices.erase(prices.begin()); volume.erase(volume.begin()); }
     }
 
-    std::vector<float> returnSimpleMovingAverage(int period) { // "upstream" definition of returnRollingMovingAverage
+    std::vector<double> returnSimpleMovingAverage(int period) { // "upstream" definition of returnRollingMovingAverage
         SetAnalytics sa(prices); // stack object, dies with the scope, nothing to free
         return sa.returnRollingMovingAverage(period);
     }
@@ -464,16 +464,16 @@ public:
     /// seeds with a simple average of the first `period` values, then applies the
     /// standard EMA formula from there
     /// @param period lookback / smoothing length
-    std::vector<float> returnExponentialMovingAverage(int period) {
+    std::vector<double> returnExponentialMovingAverage(int period) {
         if ((int)prices.size() < period * 2) return {};
-        std::vector<float> requiredChunk(prices.end() - (period*2), prices.end());
-        std::vector<float> emaOverTime;
+        std::vector<double> requiredChunk(prices.end() - (period*2), prices.end());
+        std::vector<double> emaOverTime;
 
-        float multiplier = 2.0f / static_cast<float>(period + 1);
+        double multiplier = 2.0 / static_cast<double>(period + 1);
 
-        float seed = 0;
+        double seed = 0;
         for (int i = 0; i < period; i++) { seed += requiredChunk[i]; }
-        float ema = seed / static_cast<float>(period);
+        double ema = seed / static_cast<double>(period);
 
         for (int i = period; i < requiredChunk.size(); i++) {
             ema = (requiredChunk[i] - ema) * multiplier + ema;
@@ -489,10 +489,10 @@ public:
     /// @param prices   the price vec to scan
     /// @param volumeData per-bar volume, same length as prices
     /// @return [[price, volume], [price, volume], ...] feed this into returnValueArea
-    std::vector<std::vector<float>> returnVolumeProfile(int anchor) { // anchor idx inside of the prices vec that gets passed
-        std::unordered_map<float, float> map;
+    std::vector<std::vector<double>> returnVolumeProfile(int anchor) { // anchor idx inside of the prices vec that gets passed
+        std::unordered_map<double, double> map;
         for (int i=anchor; i<(int)prices.size(); i++) map[prices[i]] += volume[i];
-        std::vector<std::vector<float>> passedPrices;
+        std::vector<std::vector<double>> passedPrices;
         passedPrices.reserve(map.size());
         for (auto& [px, vol] : map) passedPrices.push_back({px, vol});
         return passedPrices;
@@ -503,30 +503,30 @@ public:
     /// @param volumeProfile output of returnVolumeProfile: [[price, volume], ...]
     /// @param pct           fraction of total volume to capture (default 0.70)
     /// @return {VAL, VAH} price pair, or {0,0} if the profile is empty
-    std::vector<float> returnValueArea(std::vector<std::vector<float>> volumeProfile, float pct = 0.70f) {
-        if (volumeProfile.empty()) return {0.f, 0.f};
+    std::vector<double> returnValueArea(std::vector<std::vector<double>> volumeProfile, double pct = 0.70) {
+        if (volumeProfile.empty()) return {0.0, 0.0};
 
         // Sort by price ascending so we can walk outward by index
         std::sort(volumeProfile.begin(), volumeProfile.end(),
-            [](const std::vector<float>& a, const std::vector<float>& b) { return a[0] < b[0]; });
+            [](const std::vector<double>& a, const std::vector<double>& b) { return a[0] < b[0]; });
 
         // Total volume + find POC (index of highest-volume level)
-        float totalVol = 0.f;
+        double totalVol = 0.0;
         int pocIdx = 0;
         for (int i = 0; i < (int)volumeProfile.size(); i++) {
             totalVol += volumeProfile[i][1];
             if (volumeProfile[i][1] > volumeProfile[pocIdx][1]) pocIdx = i;
         }
 
-        float targetVol = totalVol * pct;
-        float captured = volumeProfile[pocIdx][1];
+        double targetVol = totalVol * pct;
+        double captured = volumeProfile[pocIdx][1];
         int lo = pocIdx;
         int hi = pocIdx;
 
         // Expand whichever side adds more volume until we hit the target
         while (captured < targetVol && (lo > 0 || hi < (int)volumeProfile.size() - 1)) {
-            float volBelow = (lo > 0) ? volumeProfile[lo - 1][1] : 0.f;
-            float volAbove = (hi < (int)volumeProfile.size() - 1) ? volumeProfile[hi + 1][1] : 0.f;
+            double volBelow = (lo > 0) ? volumeProfile[lo - 1][1] : 0.0;
+            double volAbove = (hi < (int)volumeProfile.size() - 1) ? volumeProfile[hi + 1][1] : 0.0;
 
             if (lo <= 0) {
                 hi++; captured += volAbove;
@@ -547,8 +547,8 @@ public:
     /// one output value per bar in that range (parallel to prices[anchor..])
     /// @param anchor starting index inside `prices` (everything before is ignored)
     /// @return running VWAP, one value per bar from anchor to the end of prices
-    std::vector<float> returnVWAP(int anchor) {
-        std::vector<float> vwap;
+    std::vector<double> returnVWAP(int anchor) {
+        std::vector<double> vwap;
         if (anchor < 0 || anchor >= (int)prices.size()) return vwap;
         vwap.reserve(prices.size() - anchor);
 
@@ -556,7 +556,7 @@ public:
         for (int i = anchor; i < (int)prices.size(); i++) {
             sumPV += (double)prices[i] * volume[i];
             sumV += volume[i];
-            vwap.push_back(sumV > 0.0 ? static_cast<float>(sumPV / sumV) : prices[i]);
+            vwap.push_back(sumV > 0.0 ? static_cast<double>(sumPV / sumV) : prices[i]);
         }
         return vwap;
     }
@@ -565,8 +565,8 @@ public:
 // TODO - Use an OOP approach for this, as done above
 
 /// @brief fraction of trades that were winners (0.0-1.0), returns 0 if no trades
-float returnWinrate() {
-    if (trades.empty()) return 0.0f;
+double returnWinrate() {
+    if (trades.empty()) return 0.0;
 
     int cumTrades = 0;
     int cumWins = 0;
@@ -576,14 +576,14 @@ float returnWinrate() {
         if (t.win) ++cumWins;
     }
 
-    return static_cast<float>(cumWins) / static_cast<float>(cumTrades);
+    return static_cast<double>(cumWins) / static_cast<double>(cumTrades);
 }
 
 /// @brief total profit across all closed trades, in points
-float returnCumProfit() {
-    if (trades.empty()) return 0.0f;
+double returnCumProfit() {
+    if (trades.empty()) return 0.0;
 
-    float cumProfit = 0;
+    double cumProfit = 0;
 
     for (auto& t : trades) { cumProfit += t.profit; }
     return cumProfit;
@@ -592,8 +592,8 @@ float returnCumProfit() {
 /// @brief equity curve bucketed into fixed-width time bars, each bar holds the
 /// last equity value that fell inside it; empty bars carry forward
 /// @param bucketMins width of each bar in minutes (default 1)
-std::vector<float> returnProfitOverTime(int bucketMins = 1) {
-    if (equityCurve.empty() || bucketMins <= 0) return std::vector<float>{};
+std::vector<double> returnProfitOverTime(int bucketMins = 1) {
+    if (equityCurve.empty() || bucketMins <= 0) return std::vector<double>{};
 
     const long long bucketSec = static_cast<long long>(bucketMins) * 60LL;
     const long long firstBucket = equityCurve.front().first / bucketSec;
@@ -602,8 +602,8 @@ std::vector<float> returnProfitOverTime(int bucketMins = 1) {
 
     // For each bucket, take the last equity sample that falls inside it.
     // Empty buckets carry the previous bucket's equity forward.
-    std::vector<float> profitOverTime(n, 0.f);
-    float lastEq = 0.f;
+    std::vector<double> profitOverTime(n, 0.0);
+    double lastEq = 0.0;
     size_t sampleIdx = 0;
     for (size_t b = 0; b < n; ++b) {
         long long bucketMax = (firstBucket + static_cast<long long>(b) + 1) * bucketSec - 1;
@@ -618,24 +618,24 @@ std::vector<float> returnProfitOverTime(int bucketMins = 1) {
 
 /// @brief running average profit per trade, one value per closed trade, so you
 /// can see if your edge is improving or degrading over time
-std::vector<float> returnAverageProfitOverTime() {
-    if (trades.empty()) return std::vector<float>{};
+std::vector<double> returnAverageProfitOverTime() {
+    if (trades.empty()) return std::vector<double>{};
 
-    std::vector<float> avgOverTime;
+    std::vector<double> avgOverTime;
     avgOverTime.reserve(trades.size());
-    float sum = 0.f;
+    double sum = 0.0;
     for (size_t i = 0; i < trades.size(); ++i) {
         sum += trades[i].profit;
-        avgOverTime.push_back(sum / static_cast<float>(i + 1));
+        avgOverTime.push_back(sum / static_cast<double>(i + 1));
     }
     return avgOverTime;
 }
 
 /// @brief cumulative profit indexed per trade
-std::vector<float> returnCumProfitPerTrade() {
-    std::vector<float> curve;
+std::vector<double> returnCumProfitPerTrade() {
+    std::vector<double> curve;
     curve.reserve(trades.size());
-    float cum = 0.f;
+    double cum = 0.0;
     for (auto& t : trades) {
         cum += t.profit;
         curve.push_back(cum);
@@ -645,13 +645,13 @@ std::vector<float> returnCumProfitPerTrade() {
 
 /// @brief cumulative profit bucketed by time period, matches returnMonteCarlo bucketing
 /// @param bucketSecs bucket width in seconds (86400 = daily)
-std::vector<float> returnCumProfitBucketed(int bucketSecs = 86400) {
+std::vector<double> returnCumProfitBucketed(int bucketSecs = 86400) {
     if (trades.empty() || bucketSecs <= 0) return {};
     long long bsec = (long long)bucketSecs;
     long long curBucket = trades[0].closeEpochSec / bsec;
-    float bucketPnl = 0.f;
-    float cum = 0.f;
-    std::vector<float> curve;
+    double bucketPnl = 0.0;
+    double cum = 0.0;
+    std::vector<double> curve;
     for (auto& t : trades) {
         long long tb = t.closeEpochSec / bsec;
         if (tb != curBucket) {
@@ -659,7 +659,7 @@ std::vector<float> returnCumProfitBucketed(int bucketSecs = 86400) {
             curve.push_back(cum);
             for (long long gap = curBucket + 1; gap < tb; gap++) curve.push_back(cum);
             curBucket = tb;
-            bucketPnl = 0.f;
+            bucketPnl = 0.0;
         }
         bucketPnl += t.profit;
     }
@@ -670,10 +670,10 @@ std::vector<float> returnCumProfitBucketed(int bucketSecs = 86400) {
 
 /// @brief downsample a vector to at most maxPts points using largest-triangle-three-buckets-ish
 /// keeps first and last, picks representative points in between
-std::vector<float> downsample(const std::vector<float>& src, int maxPts) {
+std::vector<double> downsample(const std::vector<double>& src, int maxPts) {
     int n = (int)src.size();
     if (n <= maxPts) return src;
-    std::vector<float> out;
+    std::vector<double> out;
     out.reserve(maxPts);
     for (int i = 0; i < maxPts; i++) {
         int idx = (int)((long long)i * (n - 1) / (maxPts - 1));
@@ -686,10 +686,10 @@ std::vector<float> downsample(const std::vector<float>& src, int maxPts) {
 /// returnAverageWinSize / returnAverageLossSize, but you can pass any filter
 /// @param pred a callable that takes a tradeData and returns true for trades to include
 template <typename Predicate>
-float returnExpectancy(Predicate pred) {
-    if (trades.empty()) return 0.0f;
+double returnExpectancy(Predicate pred) {
+    if (trades.empty()) return 0.0;
 
-    float cumPnL = 0;
+    double cumPnL = 0;
     int count = 0;
     for (const auto& t : trades) {
         if (pred(t)) {
@@ -697,34 +697,34 @@ float returnExpectancy(Predicate pred) {
             ++count;
         }
     }
-    if (count == 0) return 0.0f;
-    return cumPnL / static_cast<float>(count);
+    if (count == 0) return 0.0;
+    return cumPnL / static_cast<double>(count);
 }
 
 /// @brief average profit of winning trades (in pts)
-float returnAverageWinSize() {
+double returnAverageWinSize() {
     return returnExpectancy([](const tradeData& t) { return t.win; });
 }
 
 /// @brief average loss of losing trades (in pts, will be negative)
-float returnAverageLossSize() {
+double returnAverageLossSize() {
     return returnExpectancy([](const tradeData& t) { return !t.win; });
 }
 
 /// @brief average P&L across all trades (in pts)
-float returnAvgPnl() {
+double returnAvgPnl() {
     return returnExpectancy([](const tradeData&) { return true; });
 }
 
 /// @brief trades per calendar day based on first/last trade close timestamps
-float returnTradesPerDay() {
-    if (trades.size() < 2) return 0.f;
+double returnTradesPerDay() {
+    if (trades.size() < 2) return 0.0;
     long long first = trades.front().closeEpochSec;
     long long last  = trades.back().closeEpochSec;
-    if (last <= first) return 0.f;
-    float days = (last - first) / 86400.f;
-    if (days < 0.001f) return 0.f;
-    return (float)trades.size() / days;
+    if (last <= first) return 0.0;
+    double days = (last - first) / 86400.0;
+    if (days < 0.001) return 0.0;
+    return (double)trades.size() / days;
 }
 
 // mc stuff only for equity curve, uses stationary bootstrap (Politis & Romano 1994)
@@ -736,25 +736,25 @@ float returnTradesPerDay() {
 /// @param bucketSecs if > 0, aggregate trade PnLs into buckets of this width before
 ///        bootstrapping (86400 = daily). output paths are per-bucket instead of per-trade
 /// @param seed RNG seed, fixed by default so results are reproducible
-std::vector<std::vector<float>> returnMonteCarlo(int sims, int avgBlockLen = 5,
+std::vector<std::vector<double>> returnMonteCarlo(int sims, int avgBlockLen = 5,
     int bucketSecs = 0, unsigned seed = 42) {
     if (trades.empty() || sims <= 0) return {};
 
     // build the PnL series to bootstrap
-    std::vector<float> pnls;
+    std::vector<double> pnls;
     if (bucketSecs > 0) {
         // bucket trades by time period
         long long bsec = (long long)bucketSecs;
         long long curBucket = trades[0].closeEpochSec / bsec;
-        float bucketPnl = 0.f;
+        double bucketPnl = 0.0;
         for (auto& t : trades) {
             long long tb = t.closeEpochSec / bsec;
             if (tb != curBucket) {
                 pnls.push_back(bucketPnl);
                 // fill empty buckets with 0
-                for (long long gap = curBucket + 1; gap < tb; gap++) pnls.push_back(0.f);
+                for (long long gap = curBucket + 1; gap < tb; gap++) pnls.push_back(0.0);
                 curBucket = tb;
-                bucketPnl = 0.f;
+                bucketPnl = 0.0;
             }
             bucketPnl += t.profit;
         }
@@ -769,12 +769,12 @@ std::vector<std::vector<float>> returnMonteCarlo(int sims, int avgBlockLen = 5,
     std::geometric_distribution<int> blockDist(1.0 / avgBlockLen);
     std::uniform_int_distribution<int> startDist(0, n - 1);
 
-    std::vector<std::vector<float>> paths;
+    std::vector<std::vector<double>> paths;
     paths.reserve(sims);
 
     for (int s = 0; s < sims; s++) {
-        std::vector<float> curve(n);
-        float cum = 0;
+        std::vector<double> curve(n);
+        double cum = 0;
         int i = 0;
         while (i < n) {
             int start = startDist(rng);
@@ -794,24 +794,24 @@ std::vector<std::vector<float>> returnMonteCarlo(int sims, int avgBlockLen = 5,
 /// @param mcPaths output of returnMonteCarlo
 /// @param percentiles list of percentiles 0-100 (e.g. {5, 50, 95})
 /// @return one column per percentile, each column has trades.size() values
-std::vector<std::vector<float>> returnPercentilePaths(
-    const std::vector<std::vector<float>>& mcPaths,
+std::vector<std::vector<double>> returnPercentilePaths(
+    const std::vector<std::vector<double>>& mcPaths,
     std::vector<int> percentiles) {
 
     if (mcPaths.empty() || percentiles.empty()) return {};
     int steps = (int)mcPaths[0].size();
     int nSims = (int)mcPaths.size();
 
-    std::vector<std::vector<float>> result(percentiles.size());
+    std::vector<std::vector<double>> result(percentiles.size());
     for (auto& r : result) r.resize(steps);
 
-    std::vector<float> col(nSims);
+    std::vector<double> col(nSims);
     for (int step = 0; step < steps; step++) {
         for (int s = 0; s < nSims; s++) col[s] = mcPaths[s][step];
         std::sort(col.begin(), col.end());
 
         for (int p = 0; p < (int)percentiles.size(); p++) {
-            int idx = (int)((percentiles[p] / 100.f) * (nSims - 1));
+            int idx = (int)((percentiles[p] / 100.0) * (nSims - 1));
             if (idx >= nSims) idx = nSims - 1;
             result[p][step] = col[idx];
         }

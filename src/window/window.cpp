@@ -28,7 +28,7 @@
 /// @param panelId panel to add into (no-op if not found)
 /// @param label   legend label
 /// @param data    values plotted in order
-void newLineSeries(std::string panelId, std::string label, std::vector<float> data) {
+void newLineSeries(std::string panelId, std::string label, std::vector<double> data) {
     auto* panel = panelManagement::findPanel(panelId);
     if (panel) panel->children.push_back({panelManagement::Line, label, data});
 }
@@ -37,7 +37,7 @@ void newLineSeries(std::string panelId, std::string label, std::vector<float> da
 /// @param panelId panel to add into (no-op if not found)
 /// @param label   legend label
 /// @param data    bar heights plotted in order
-void newBarSeries(std::string panelId, std::string label, std::vector<float> data) {
+void newBarSeries(std::string panelId, std::string label, std::vector<double> data) {
     auto* panel = panelManagement::findPanel(panelId);
     if (panel) panel->children.push_back({panelManagement::Bar, label, data});
 }

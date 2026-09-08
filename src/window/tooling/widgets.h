@@ -72,13 +72,13 @@ inline void renderSeriesExplorer(Widget& widget, const std::string& windowId) {
     for (int col = 0; col < series.cols(); col++) {
         auto& colData = series.data[col];
         if (colData.empty()) continue;
-        float min = colData[0], max = colData[0], sum = 0;
-        for (float v : colData) {
+        double min = colData[0], max = colData[0], sum = 0;
+        for (double v : colData) {
             if (v < min) min = v;
             if (v > max) max = v;
             sum += v;
         }
-        float avg = sum / (float)colData.size();
+        double avg = sum / (double)colData.size();
         if (series.cols() > 1) {
             ImGui::Text("[%s]", series.colName(col).c_str());
             ImGui::SameLine();
@@ -93,7 +93,7 @@ inline void renderSeriesExplorer(Widget& widget, const std::string& windowId) {
             ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV,
             ImVec2(-1, -1))) {
         ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn("Index", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+        ImGui::TableSetupColumn("Index", ImGuiTableColumnFlags_WidthFixed, 60.0);
         for (int col = 0; col < series.cols(); col++) {
             std::string header = series.cols() == 1 ? "Value" : series.colName(col);
             ImGui::TableSetupColumn(header.c_str(), ImGuiTableColumnFlags_WidthStretch);
@@ -151,7 +151,7 @@ inline void renderStatisticExplorer(Widget& widget, const std::string& windowId)
             ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterH,
             ImVec2(-1, 0))) {
         ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 120.0);
         ImGui::TableHeadersRow();
 
         for (int idx : widget.selectedStatIdxs) {
@@ -181,8 +181,8 @@ inline void renderWindows() {
             ImVec2 avail = ImGui::GetContentRegionAvail();
             ImVec2 btnSize(120, 0);
             ImGui::SetCursorPos(ImVec2(
-                ImGui::GetCursorPosX() + (avail.x - btnSize.x) * 0.5f,
-                ImGui::GetCursorPosY() + avail.y * 0.5f - ImGui::GetFrameHeight() * 0.5f
+                ImGui::GetCursorPosX() + (avail.x - btnSize.x) * 0.5,
+                ImGui::GetCursorPosY() + avail.y * 0.5 - ImGui::GetFrameHeight() * 0.5
             ));
             std::string popupId = "AddWidget##" + w.id;
             if (ImGui::Button(("Add widget...##" + w.id).c_str(), btnSize)) {

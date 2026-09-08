@@ -13,9 +13,9 @@ int main() {
 
     // Handling reads prices.back() as "the price right now", so this vector only
     // ever holds the bar being processed
-    std::vector<float> prices;
+    std::vector<double> prices;
     MarketData md(kCSVMapping.path);
-    Handling handler(prices, 0.25f, 0.50f);
+    Handling handler(prices, 0.25, 0.50);
 
     const int timeframe = 60;   // seconds per bar
     const int batchSize = 500;  // rows per read, an io detail, not a strategy knob
@@ -45,7 +45,7 @@ int main() {
     handler.closeAll();
 
     auto profit = returnProfitOverTime(1440);
-    addLine("equity", std::vector<std::vector<float>>{profit}, {"actual"},
+    addLine("equity", std::vector<std::vector<double>>{profit}, {"actual"},
             RGBA{0.5f, 0.8f, 0.5f, 1.0f});
 
     showConsole("Console", skins::dark);
