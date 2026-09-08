@@ -13,14 +13,14 @@ int main() {
 
     // Handling reads prices.back() as "the price right now", so this vector only
     // ever holds the bar being processed. indicator history is kept separately
-    std::vector<float> prices;
+    std::vector<double> prices;
     MarketData md(kCSVMapping.path);
-    Handling handler(prices, 0.25f, 0.50f);
+    Handling handler(prices, 0.25, 0.50);
 
     const int   shortPeriod = 100;
     const int   longPeriod  = 200;
-    const float takeProfit  = 500.f;
-    const float stopLoss    = 50.f;
+    const double takeProfit  = 500.0;
+    const double stopLoss    = 50.0;
 
     const int timeframe = 60;   // seconds per bar
     const int batchSize = 500;  // rows per read, an io detail, not a strategy knob
@@ -29,7 +29,7 @@ int main() {
 
     // trailing window of closes, capped at longPeriod so the work per bar is flat
     // rather than growing with the length of the backtest
-    std::vector<float> history;
+    std::vector<double> history;
     history.reserve(longPeriod);
 
     int bar = 0;
@@ -53,7 +53,7 @@ int main() {
 
             // risk first, so a runner gets cut before any signal work
             if (handler.openTrade) {
-                const float pnl = handler.openTrade->td.profit;
+                const double pnl = handler.openTrade->td.profit;
                 if (pnl >= takeProfit || pnl <= -stopLoss) handler.closeTrade();
             }
 
@@ -62,8 +62,8 @@ int main() {
             // recomputed every bar from closes up to and including this one, so a
             // signal can never be built out of prices that haven't happened
             PriceAnalytics pa(history);
-            const float shortMa = pa.returnSimpleMovingAverage(shortPeriod).back();
-            const float longMa  = pa.returnSimpleMovingAverage(longPeriod).back();
+            const double shortMa = pa.returnSimpleMovingAverage(shortPeriod).back();
+            const double longMa  = pa.returnSimpleMovingAverage(longPeriod).back();
 
             const bool shortAbove = shortMa > longMa;
             const bool shortBelow = shortMa < longMa;
@@ -84,7 +84,7 @@ int main() {
     auto pctPaths = returnPercentilePaths(mcPaths, {5, 50, 95});
     auto profit   = returnCumProfitBucketed(86400);
 
-    std::vector<std::vector<float>> mainPaths;
+    std::vector<std::vector<double>> mainPaths;
     mainPaths.push_back(profit);
     for (auto& p : pctPaths) mainPaths.push_back(std::move(p));
 

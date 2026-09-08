@@ -6,14 +6,14 @@ namespace statPool {
 
 struct Stat {
     std::string name;
-    float value;
+    double value;
 };
 
 /// @brief process-wide pool of logged stats
 inline std::vector<Stat> pool;
 
 /// @brief log a stat by name, overwrites if it already exists
-inline void addStat(std::string name, float value) {
+inline void addStat(std::string name, double value) {
     for (auto& s : pool) {
         if (s.name == name) { s.value = value; return; }
     }

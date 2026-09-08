@@ -130,8 +130,8 @@ private:
     double  curPrice()   const { return _pxArr->Value(_rowInGroup); }
     int64_t curSizeRaw() const { return _szArr->Value(_rowInGroup); }
     // 0 when the column isn't configured, matching Tick's default and the CSV path
-    float curRestingBid() const { return _bidArr ? static_cast<float>(_bidArr->Value(_rowInGroup)) : 0.f; }
-    float curRestingAsk() const { return _askArr ? static_cast<float>(_askArr->Value(_rowInGroup)) : 0.f; }
+    double curRestingBid() const { return _bidArr ? static_cast<double>(_bidArr->Value(_rowInGroup)) : 0.0; }
+    double curRestingAsk() const { return _askArr ? static_cast<double>(_askArr->Value(_rowInGroup)) : 0.0; }
     long long curTsNanos() const { return static_cast<long long>(_tsArr->Value(_rowInGroup)) * _tsUnitMul; }
 
     // advance past rows that don't match the configured symbol filter, mirrors
@@ -286,7 +286,7 @@ public:
         auto [ptr, ec] = std::to_chars(_pxBuf, _pxBuf + sizeof(_pxBuf), curPrice());
         t.price = std::string_view(_pxBuf, static_cast<std::size_t>(ptr - _pxBuf));
 
-        t.size = static_cast<float>(curSizeRaw());
+        t.size = static_cast<double>(curSizeRaw());
 
         if (_aggPos >= 0) {
             std::string_view sideView = curSide();
@@ -315,13 +315,13 @@ public:
         std::string targetOwned = mdDetail::endTimestamp(firstTs, seconds);
         std::string_view target(targetOwned);
 
-        float barVolume = 0.f, buys = 0.f, sells = 0.f, unknown = 0.f;
+        double barVolume = 0.0, buys = 0.0, sells = 0.0, unknown = 0.0;
         // the row's side alias, or nullptr when side classification is disabled
         const char* rowSide = nullptr;
 
         // fold the row _absoluteRow currently points at into the running totals
         auto accumulate = [&]() {
-            float sz = static_cast<float>(curSizeRaw());
+            double sz = static_cast<double>(curSizeRaw());
             barVolume += sz;
 
             rowSide = nullptr;
@@ -338,7 +338,7 @@ public:
         double lastPx = curPrice();
         // resting sizes are book snapshots, summing them across the bar would be
         // meaningless, so they track the closing row alongside the price
-        float lastBid = curRestingBid(), lastAsk = curRestingAsk();
+        double lastBid = curRestingBid(), lastAsk = curRestingAsk();
         std::string lastTs = firstTs;
         accumulate();
         ++_absoluteRow;

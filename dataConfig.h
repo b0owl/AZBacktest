@@ -55,9 +55,9 @@ struct CSVMapping {
     int restingBidCol;                               // column index of the resting bid size, -1 to disable
     int restingAskCol;                               // column index of the resting ask size, -1 to disable
 
-    float commision;                                 // commision, pts
-    float spread;                                    // spread, pts
-    float timingCost;                                // how much do you lose from latency? (pts)
+    double commision;                                 // commision, pts
+    double spread;                                    // spread, pts
+    double timingCost;                                // how much do you lose from latency? (pts)
 };
 
 // persistent string storage so const char* fields stay valid

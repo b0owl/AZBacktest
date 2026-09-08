@@ -24,7 +24,7 @@ struct Stats {
 
 /// @brief percentile of an already sorted vector
 /// @param pct 0..100, clamped
-inline double percentileOf(const std::vector<float>& sorted, double pct) {
+inline double percentileOf(const std::vector<double>& sorted, double pct) {
     if (sorted.empty()) return 0.0;
     if (pct <= 0.0)   return sorted.front();
     if (pct >= 100.0) return sorted.back();
@@ -35,19 +35,19 @@ inline double percentileOf(const std::vector<float>& sorted, double pct) {
 }
 
 /// @brief stats for a column, stdev is the sample one (n-1)
-inline Stats computeStats(const std::vector<float>& v) {
+inline Stats computeStats(const std::vector<double>& v) {
     Stats st;
     st.n = (int)v.size();
     if (st.n == 0) return st;
 
-    for (float x : v) st.sum += x;
+    for (double x : v) st.sum += x;
     st.mean = st.sum / (double)st.n;
 
     double acc = 0.0;
-    for (float x : v) { const double d = (double)x - st.mean; acc += d * d; }
+    for (double x : v) { const double d = (double)x - st.mean; acc += d * d; }
     st.stdev = st.n > 1 ? std::sqrt(acc / (double)(st.n - 1)) : 0.0;
 
-    std::vector<float> sorted = v;
+    std::vector<double> sorted = v;
     std::sort(sorted.begin(), sorted.end());
     st.min    = sorted.front();
     st.max    = sorted.back();
@@ -99,7 +99,7 @@ inline int nextTransformId() {
 
 /// what p() needs to answer, a sorted copy of the column being worked on
 struct EvalCtx {
-    const std::vector<float>* sorted = nullptr;
+    const std::vector<double>* sorted = nullptr;
 };
 
 /// @brief p(k), any percentile of the source column, k is 0..100 and gets clamped
@@ -136,13 +136,13 @@ inline std::vector<formula::Var> buildVars(const Stats& st) {
 /// @param keepExpr  optional filter, point survives when nonzero
 /// @param err       first error hit, cleared on success
 /// @return the new column, empty if a formula didn't parse
-inline std::vector<float> applyFormula(const std::vector<float>& src,
+inline std::vector<double> applyFormula(const std::vector<double>& src,
                                        const std::string& valueExpr,
                                        const std::string& keepExpr,
                                        const Stats& st,
                                        std::string& err) {
     err.clear();
-    std::vector<float> out;
+    std::vector<double> out;
     if (src.empty()) return out;
 
     std::vector<formula::Var> vars = buildVars(st);
@@ -150,7 +150,7 @@ inline std::vector<float> applyFormula(const std::vector<float>& src,
     out.reserve(src.size());
 
     // sorted once here, not per point, otherwise p() would be O(n^2 log n)
-    std::vector<float> sorted = src;
+    std::vector<double> sorted = src;
     std::sort(sorted.begin(), sorted.end());
     EvalCtx ctx;
     ctx.sorted = &sorted;
@@ -167,14 +167,14 @@ inline std::vector<float> applyFormula(const std::vector<float>& src,
 
         formula::Result v = formula::eval(vexpr, vars, percentileFn, &ctx);
         if (!v.ok()) { err = "value: " + v.error; return {}; }
-        out.push_back((float)v.value);
+        out.push_back((double)v.value);
     }
     return out;
 }
 
 /// @brief drop `data` into the pool as `name`, overwriting if it's already there
 /// overwrite not append, otherwise you'd stack up duplicates every session
-inline void publish(const std::string& name, const std::vector<float>& data) {
+inline void publish(const std::string& name, const std::vector<double>& data) {
     if (seriesPool::NamedSeries* existing = seriesPool::findSeries(name)) {
         existing->data.assign(1, data);
         existing->color = seriesPool::resolveColor({});
@@ -194,9 +194,9 @@ inline bool rebuildPublished(TransformWindow& t) {
     const seriesPool::NamedSeries& src = seriesPool::pool[t.selectedSeriesIdx];
     if (t.col < 0 || t.col >= src.cols()) return false;
 
-    const std::vector<float> column = src.data[t.col];   // copy, publish may reallocate the pool
+    const std::vector<double> column = src.data[t.col];   // copy, publish may reallocate the pool
     std::string err;
-    const std::vector<float> out =
+    const std::vector<double> out =
         applyFormula(column, t.valueExpr, t.keepExpr, computeStats(column), err);
     if (!err.empty() || out.empty()) return false;
 
@@ -235,7 +235,7 @@ inline void renderHelp() {
     ImGui::TextDisabled("(?)");
     if (!ImGui::IsItemHovered()) return;
     ImGui::BeginTooltip();
-    ImGui::PushTextWrapPos(460.0f);
+    ImGui::PushTextWrapPos(460.0);
     ImGui::TextUnformatted(
         "Per point:  x (value)   i (index, from 0)\n"
         "Whole column:  n mean median stdev min max sum p25 p75\n"
@@ -325,7 +325,7 @@ inline void renderTransforms() {
         ImGui::SameLine();
         renderHelp();
 
-        const std::vector<float>& src = series.data[t.col];
+        const std::vector<double>& src = series.data[t.col];
         const Stats before = computeStats(src);
 
         // the formulas
@@ -342,10 +342,10 @@ inline void renderTransforms() {
                                      t.keepExpr, sizeof(t.keepExpr))) dirty = true;
 
         std::string err;
-        const std::vector<float> out = applyFormula(src, t.valueExpr, t.keepExpr, before, err);
+        const std::vector<double> out = applyFormula(src, t.valueExpr, t.keepExpr, before, err);
 
         if (!err.empty()) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.45f, 0.40f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95, 0.45, 0.40, 1.0));
             ImGui::TextWrapped("%s", err.c_str());
             ImGui::PopStyleColor();
         } else if (out.empty()) {

@@ -148,7 +148,7 @@ inline void renderPanels() {
                     if (c.unbound || c.kind == Heatmap) continue;
                     {
                         ImVec4 cv = c.color.isSet() ? ImVec4(c.color.r, c.color.g, c.color.b, c.color.a) : IMPLOT_AUTO_COL;
-                        ImPlot::SetNextLineStyle(cv, c.lineWidth > 0.f ? c.lineWidth : IMPLOT_AUTO);
+                        ImPlot::SetNextLineStyle(cv, c.lineWidth > 0.0 ? c.lineWidth : IMPLOT_AUTO);
                         if (c.color.isSet()) {
                             ImPlot::SetNextFillStyle(cv);
                             ImPlot::SetNextMarkerStyle(IMPLOT_AUTO, IMPLOT_AUTO, cv);
@@ -165,8 +165,8 @@ inline void renderPanels() {
                         ImPlot::PlotLine(c.label.c_str(), c.data.data(), (int)c.data.size());
                         if (!c.errors.empty()) {
                             int n = (int)c.data.size();
-                            std::vector<float> xs(n);
-                            for (int i = 0; i < n; i++) xs[i] = (float)i;
+                            std::vector<double> xs(n);
+                            for (int i = 0; i < n; i++) xs[i] = (double)i;
                             ImPlot::PlotErrorBars(c.label.c_str(), xs.data(), c.data.data(), c.errors.data(), n);
                         }
                     }

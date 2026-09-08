@@ -76,18 +76,18 @@ enum SeriesKind { Line, Bar, Heatmap, Scatter, ErrorBar };
 struct Series {
     SeriesKind kind;
     std::string label;
-    std::vector<float> data;
+    std::vector<double> data;
     bool unbound = false;
     seriesPool::RGBA color;  ///< -1 = let ImPlot pick
     bool legendHidden = false; ///< true = plot but don't show in legend
     bool onY2 = false;         ///< true = plot against the secondary (right) y-axis
-    std::vector<float> xs;     ///< non-empty = explicit x per point (e.g. histogram), else index-based
-    float barWidth = 0.67f;    ///< only used when xs is non-empty
+    std::vector<double> xs;     ///< non-empty = explicit x per point (e.g. histogram), else index-based
+    double barWidth = 0.67;    ///< only used when xs is non-empty
     int heatmapRows = 0;       ///< heatmap row count (type 2 only)
     int heatmapCols = 0;       ///< heatmap col count (type 2 only)
     seriesPool::HeatmapAxes heatmapAxes; ///< optional row/column labelling (Heatmap kind only)
-    std::vector<float> errors; ///< per-point error magnitude (ErrorBar kind only)
-    float lineWidth = -1.f;    ///< line thickness in px, <=0 = let ImPlot pick (appended at the end so existing positional {...} initializers above stay valid)
+    std::vector<double> errors; ///< per-point error magnitude (ErrorBar kind only)
+    float lineWidth = -1.0;    ///< line thickness in px, <=0 = let ImPlot pick (appended at the end so existing positional {...} initializers above stay valid)
 
     // provenance, used to persist + restore this child from the .ini: which pool
     // series it was pulled from (empty = raw data added via newLine/BarSeries,

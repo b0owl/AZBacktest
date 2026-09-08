@@ -96,11 +96,11 @@ TEST(nFieldsShortRowLeavesMissingColumnsEmpty) {
 }
 
 TEST(parseOptionalFloatLeavesDestinationAloneWhenEmpty) {
-    float v = 7.f;
+    double v = 7.0;
     mdDetail::parseOptionalFloat("", v);
-    CHECK_F(v, 7.f);
+    CHECK_F(v, 7.0);
     mdDetail::parseOptionalFloat("42", v);
-    CHECK_F(v, 42.f);
+    CHECK_F(v, 42.0);
 }
 
 // ---------------------------------------------------------------- date helpers
@@ -164,7 +164,7 @@ TEST(nextTickParsesPriceSizeAndTimestamp) {
     REQUIRE(t.has_value());
     CHECK_EQ(t->timestamp, "2025-06-01T22:00:00.000000000Z");
     CHECK_EQ(t->price, "5000.25");
-    CHECK_F(t->size, 3.f);
+    CHECK_F(t->size, 3.0);
 }
 
 TEST(nextTickSkipsHeaderRow) {
@@ -183,21 +183,21 @@ TEST(nextTickClassifiesAggressorSide) {
 
     auto buy = md.nextTick();     // side B
     REQUIRE(buy.has_value());
-    CHECK_F(buy->executedBuys,  3.f);
-    CHECK_F(buy->executedSells, 0.f);
-    CHECK_F(buy->unknownVolume, 0.f);
+    CHECK_F(buy->executedBuys,  3.0);
+    CHECK_F(buy->executedSells, 0.0);
+    CHECK_F(buy->unknownVolume, 0.0);
 
     auto sell = md.nextTick();    // side A
     REQUIRE(sell.has_value());
-    CHECK_F(sell->executedBuys,  0.f);
-    CHECK_F(sell->executedSells, 7.f);
-    CHECK_F(sell->unknownVolume, 0.f);
+    CHECK_F(sell->executedBuys,  0.0);
+    CHECK_F(sell->executedSells, 7.0);
+    CHECK_F(sell->unknownVolume, 0.0);
 
     auto unk = md.nextTick();     // side X, matches neither alias
     REQUIRE(unk.has_value());
-    CHECK_F(unk->executedBuys,  0.f);
-    CHECK_F(unk->executedSells, 0.f);
-    CHECK_F(unk->unknownVolume, 2.f);
+    CHECK_F(unk->executedBuys,  0.0);
+    CHECK_F(unk->executedSells, 0.0);
+    CHECK_F(unk->unknownVolume, 2.0);
 }
 
 TEST(nextTickVolumeSplitAlwaysSumsToSize) {
@@ -216,9 +216,9 @@ TEST(nextTickAllVolumeIsUnknownWhenAggressorDisabled) {
 
     auto t = md.nextTick(); // side column says B, but classification is off
     REQUIRE(t.has_value());
-    CHECK_F(t->executedBuys,  0.f);
-    CHECK_F(t->executedSells, 0.f);
-    CHECK_F(t->unknownVolume, 3.f);
+    CHECK_F(t->executedBuys,  0.0);
+    CHECK_F(t->executedSells, 0.0);
+    CHECK_F(t->unknownVolume, 3.0);
 }
 
 TEST(nextTickReadsRestingBidAndAsk) {
@@ -226,8 +226,8 @@ TEST(nextTickReadsRestingBidAndAsk) {
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
 
-    const float wantBid[6] = {40, 41, 45, 60, 61, 30};
-    const float wantAsk[6] = {55, 52, 50, 20, 19, 33};
+    const double wantBid[6] = {40, 41, 45, 60, 61, 30};
+    const double wantAsk[6] = {55, 52, 50, 20, 19, 33};
     for (int i = 0; i < 6; i++) {
         auto t = md.nextTick();
         REQUIRE(t.has_value());
@@ -245,9 +245,9 @@ TEST(nextTickRestingSizesAreZeroWhenUnmapped) {
 
     auto t = md.nextTick();
     REQUIRE(t.has_value());
-    CHECK_F(t->restingBids, 0.f);
-    CHECK_F(t->restingAsks, 0.f);
-    CHECK_F(t->size, 3.f); // the rest of the row still parses
+    CHECK_F(t->restingBids, 0.0);
+    CHECK_F(t->restingAsks, 0.0);
+    CHECK_F(t->size, 3.0); // the rest of the row still parses
 }
 
 // one side mapped and the other not has to work, they are independent columns
@@ -259,8 +259,8 @@ TEST(nextTickRestingBidMappedAskUnmapped) {
 
     auto t = md.nextTick();
     REQUIRE(t.has_value());
-    CHECK_F(t->restingBids, 40.f);
-    CHECK_F(t->restingAsks, 0.f);
+    CHECK_F(t->restingBids, 40.0);
+    CHECK_F(t->restingAsks, 0.0);
 }
 
 TEST(nextTickReturnsNulloptAtEof) {
@@ -281,11 +281,11 @@ TEST(nextCloseSumsVolumeAcrossBar) {
 
     auto bar1 = md.nextClose(60);
     REQUIRE(bar1.has_value());
-    CHECK_F(bar1->size, 17.f); // 3 + 7 + 2 + 5
+    CHECK_F(bar1->size, 17.0); // 3 + 7 + 2 + 5
 
     auto bar2 = md.nextClose(60);
     REQUIRE(bar2.has_value());
-    CHECK_F(bar2->size, 10.f); // 4 + 6
+    CHECK_F(bar2->size, 10.0); // 4 + 6
 
     CHECK(!md.nextClose(60).has_value());
 }
@@ -297,9 +297,9 @@ TEST(nextCloseSumsAggressorSplitAcrossBar) {
 
     auto bar = md.nextClose(60);
     REQUIRE(bar.has_value());
-    CHECK_F(bar->executedBuys,  8.f); // 3 + 5
-    CHECK_F(bar->executedSells, 7.f);
-    CHECK_F(bar->unknownVolume, 2.f);
+    CHECK_F(bar->executedBuys,  8.0); // 3 + 5
+    CHECK_F(bar->executedSells, 7.0);
+    CHECK_F(bar->unknownVolume, 2.0);
     CHECK_F(bar->executedBuys + bar->executedSells + bar->unknownVolume, bar->size);
 }
 
@@ -328,13 +328,13 @@ TEST(nextCloseRestingSizesComeFromClosingRowNotSummed) {
 
     auto bar1 = md.nextClose(60);
     REQUIRE(bar1.has_value());
-    CHECK_F(bar1->restingBids, 60.f);
-    CHECK_F(bar1->restingAsks, 20.f);
+    CHECK_F(bar1->restingBids, 60.0);
+    CHECK_F(bar1->restingAsks, 20.0);
 
     auto bar2 = md.nextClose(60);
     REQUIRE(bar2.has_value());
-    CHECK_F(bar2->restingBids, 30.f);
-    CHECK_F(bar2->restingAsks, 33.f);
+    CHECK_F(bar2->restingBids, 30.0);
+    CHECK_F(bar2->restingAsks, 33.0);
 }
 
 TEST(nextCloseRestingSizesAreZeroWhenUnmapped) {
@@ -346,9 +346,9 @@ TEST(nextCloseRestingSizesAreZeroWhenUnmapped) {
 
     auto bar = md.nextClose(60);
     REQUIRE(bar.has_value());
-    CHECK_F(bar->restingBids, 0.f);
-    CHECK_F(bar->restingAsks, 0.f);
-    CHECK_F(bar->size, 17.f); // aggregation still works
+    CHECK_F(bar->restingBids, 0.0);
+    CHECK_F(bar->restingAsks, 0.0);
+    CHECK_F(bar->size, 17.0); // aggregation still works
 }
 
 // a bar wide enough to cover everything should collapse the file into one row
@@ -359,9 +359,9 @@ TEST(nextCloseWideBarSwallowsWholeFile) {
 
     auto bar = md.nextClose(3600);
     REQUIRE(bar.has_value());
-    CHECK_F(bar->size, 27.f);          // every row
+    CHECK_F(bar->size, 27.0);          // every row
     CHECK_EQ(bar->price, "5000.25");   // last row
-    CHECK_F(bar->restingBids, 30.f);   // last row's book
+    CHECK_F(bar->restingBids, 30.0);   // last row's book
     CHECK(!md.nextClose(3600).has_value());
 }
 
