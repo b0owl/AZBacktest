@@ -86,6 +86,7 @@ FILES=(
     "$SCRIPT_DIR/src/skins/light.h"
     "$SCRIPT_DIR/src/skins/dark.h"
     "$SCRIPT_DIR/src/skins/toxic.h"
+    "$SCRIPT_DIR/src/skins/gilded.h"
     "$SCRIPT_DIR/src/window/window.h"
     "$SCRIPT_DIR/src/window/window.cpp"
 )
