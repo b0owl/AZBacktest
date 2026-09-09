@@ -440,6 +440,43 @@ public:
         }
         return zOverTime;
     }
+
+    /// @brief pearson correlation calculation between `data` and `yTerm`, a range
+    /// between -1 and 1 that measures how closely correlated two vectors are
+    /// @param yTerm what to check the correlation against
+    double computeCorrelation(std::vector<double>& yTerm) {
+        std::vector<double> XYPairProducts;
+        std::vector<double> XSquaredTerms;
+        std::vector<double> YSquaredTerms;
+
+        for (std::size_t i = 0; i < data.size(); i++) {
+            XYPairProducts.push_back(data[i] * yTerm[i]);
+            XSquaredTerms.push_back(data[i] * data[i]);
+            YSquaredTerms.push_back(yTerm[i] * yTerm[i]);
+        }
+
+        double SUMxy = std::accumulate(XYPairProducts.begin(), XYPairProducts.end(), 0.0);
+        double SUMx  = std::accumulate(data.begin(), data.end(), 0.0);
+        double SUMy  = std::accumulate(yTerm.begin(), yTerm.end(), 0.0);
+        double SUMx2 = std::accumulate(XSquaredTerms.begin(), XSquaredTerms.end(), 0.0);
+        double SUMy2 = std::accumulate(YSquaredTerms.begin(), YSquaredTerms.end(), 0.0);
+
+        double n = static_cast<double>(data.size());
+
+        double firstTerm  = n * SUMxy;
+        double secondTerm = SUMx * SUMy;
+        double top        = firstTerm - secondTerm;
+
+        double thirdTerm  = n * SUMx2;
+        double fourthTerm = std::pow(SUMx, 2);
+
+        double fifthTerm  = n * SUMy2;
+        double sixthTerm  = std::pow(SUMy, 2);
+
+        double bottom = std::sqrt((thirdTerm - fourthTerm) * (fifthTerm - sixthTerm));
+
+        return bottom != 0.0 ? top / bottom : 0.0;
+    }
 };
 
 class PriceAnalytics {
