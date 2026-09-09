@@ -8,6 +8,7 @@
 #include "../src/skins/light.h"
 #include "../src/skins/dark.h"
 #include "../src/skins/toxic.h"
+#include "../src/skins/gilded.h"
 
 int main() {
     initSeriesPool(
