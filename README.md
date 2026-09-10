@@ -3,6 +3,8 @@
 
 # AZBacktest
 
+### **Docs are in wiki!**
+
 **Before building, edit `config.toml` to map your data columns and set the data path. If the file doesn't exist, the first run will generate one with placeholder values.**
 
 C++17 backtesting framework. Header-only API with an ImGui/ImPlot visualization window.
