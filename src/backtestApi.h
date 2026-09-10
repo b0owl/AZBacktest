@@ -24,6 +24,7 @@
 #include <iostream>
 #include <unordered_map>
 #include <variant>
+#include <stdexcept>
 #include "marketData.h"
 #include "dataConfig.h"
 #include "findEOF.h"
@@ -476,6 +477,31 @@ public:
         double bottom = std::sqrt((thirdTerm - fourthTerm) * (fifthTerm - sixthTerm));
 
         return bottom != 0.0 ? top / bottom : 0.0;
+    }
+
+    /// @brief loop through the series and return a new series
+    /// of fisher-transformed values
+    /// @param lowerBound lower bound of the series
+    /// @param upperBound analagous to lowerBound
+    std::vector<double> fisherTransform(double lowerBound = -1.0, double upperBound = 1.0) {
+        std::vector<double> transformedSeries;
+        for (int i = 0; i<data.size(); i++) {
+            if (data[i] <= lowerBound || data[i] >= upperBound) {
+                throw std::out_of_range("A value in the series passed in SetAnalytics.fisherTransform was outside the specified bounds");
+            }
+            transformedSeries.push_back(0.5 * std::log((data[i] - lowerBound) / (upperBound - data[i])));
+        }
+        return transformedSeries;
+    }
+
+    /// @brief returns tanh'd series, same logic as the above transform,
+    /// it is however boundless
+    std::vector<double> tanhTransform() {
+        std::vector<double> transformedSeries;
+        for (int i = 0; i<data.size(); i++) {
+            transformedSeries.push_back(std::tanh(data[i]));
+        }
+        return transformedSeries;
     }
 };
 
