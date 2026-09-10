@@ -239,6 +239,7 @@ struct Parser {
         if (n == "sin")   { if (!need(n,a,1)) return 0; return std::sin(a[0]); }
         if (n == "cos")   { if (!need(n,a,1)) return 0; return std::cos(a[0]); }
         if (n == "tan")   { if (!need(n,a,1)) return 0; return std::tan(a[0]); }
+        if (n == "tanh")  { if (!need(n,a,1)) return 0; return std::tanh(a[0]); }
         if (n == "pow")   { if (!need(n,a,2)) return 0; return std::pow(a[0], a[1]); }
         if (n == "min")   { if (!need(n,a,2)) return 0; return a[0] < a[1] ? a[0] : a[1]; }
         if (n == "max")   { if (!need(n,a,2)) return 0; return a[0] > a[1] ? a[0] : a[1]; }
