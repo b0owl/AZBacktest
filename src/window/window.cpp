@@ -72,8 +72,11 @@ void showConsole(const char* title, void (skin)()) {
     // order matters: imgui writes .ini sections in registration order and reads
     // them back the same way. transforms have to come first because they put
     // their derived series into the pool, and panels resolve series by name
-    // while reading their own section
+    // while reading their own section. variables go before widgets for the same
+    // reason, they put their numbers in the stat pool and the statistic
+    // explorer resolves those by name
     transformManagement::registerSettingsHandler();
+    transformManagement::registerVariableSettingsHandler();
     panelManagement::registerSettingsHandler();
     widgetManagement::registerSettingsHandler();
 
@@ -90,9 +93,21 @@ void showConsole(const char* title, void (skin)()) {
         windowManagement::snapResizingWindow();
         windowManagement::clampWindowsToWorkArea();
 
+        // the .ini is read during the first NewFrame, so seed the default
+        // variable window after that. if one came back from the .ini this
+        // leaves it alone, otherwise you'd get a duplicate every launch
+        static bool seededVariable = false;
+        if (!seededVariable) {
+            seededVariable = true;
+            if (transformManagement::variables.empty())
+                transformManagement::newVariable(
+                    std::to_string(transformManagement::nextVariableId()));
+        }
+
         panelManagement::renderPanels();
         widgetManagement::renderWindows();
         transformManagement::renderTransforms();
+        transformManagement::renderVariables();
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::MenuItem("Chart")) {
                 std::string id = std::to_string(panelManagement::nextPanelId());
@@ -102,9 +117,13 @@ void showConsole(const char* title, void (skin)()) {
             if (ImGui::MenuItem("Widget")) {
                 widgetManagement::newWindow(std::to_string(widgetManagement::nextWindowId()));
             }
-            if (ImGui::MenuItem("Transform")) {
+            if (ImGui::MenuItem("Series Transform")) {
                 transformManagement::newTransform(
                     std::to_string(transformManagement::nextTransformId()));
+            }
+            if (ImGui::MenuItem("Variable Transform")) {
+                transformManagement::newVariable(
+                    std::to_string(transformManagement::nextVariableId()));
             }
 
             ImGui::EndMainMenuBar();

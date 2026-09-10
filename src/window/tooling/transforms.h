@@ -11,6 +11,7 @@
 
 #include "formula.h"
 #include "seriesPool.h"
+#include "statPool.h" // variable windows publish their number here
 
 namespace transformManagement {
 
@@ -57,7 +58,7 @@ inline Stats computeStats(const std::vector<double>& v) {
     return st;
 }
 
-/// @brief one window, a source column plus the two formulas over it
+/// @brief one series transform window, a source column plus the two formulas over it
 struct TransformWindow {
     std::string id;
     int  selectedSeriesIdx = -1;
@@ -97,6 +98,53 @@ inline int nextTransformId() {
     return maxId + 1;
 }
 
+/// @brief the stats a variable window can pull from, order matches variableValue below
+inline const char* const kVariableNames[] = {
+    "n", "mean", "median", "stdev", "min", "max", "sum", "p25", "p75"
+};
+inline constexpr int kVariableCount = (int)(sizeof(kVariableNames) / sizeof(kVariableNames[0]));
+
+/// @brief one variable transform window, a single stat of a column plus one formula
+/// same idea as TransformWindow but the result is one number instead of a series,
+/// so there's no keep formula and nothing to plot
+struct VariableWindow {
+    std::string id;
+    int  selectedSeriesIdx = -1;
+    int  col               = 0;
+    int  varIdx            = 1;     ///< which of kVariableNames feeds x, mean by default
+    char valueExpr[256]    = "x";   ///< the formula, x is the stat you picked
+    char outName[64]       = "";    ///< name typed into the save box
+    char publishedName[64] = "";    ///< stat pool entry this window owns, empty = not saved
+};
+
+/// @brief every open variable transform window
+inline std::vector<VariableWindow> variables;
+
+/// @brief find a variable window by id, or nullptr
+inline VariableWindow* findVariable(const std::string& id) {
+    for (auto& v : variables) if (v.id == id) return &v;
+    return nullptr;
+}
+
+/// @brief register a new variable window; no-op if `id` already exists
+inline void newVariable(std::string id) {
+    if (findVariable(id) == nullptr) {
+        variables.push_back(VariableWindow{});
+        variables.back().id = std::move(id);
+    }
+}
+
+/// @brief lowest free id, counted separately from the series transforms
+inline int nextVariableId() {
+    int maxId = -1;
+    for (auto& v : variables) {
+        char* endp = nullptr;
+        long n = std::strtol(v.id.c_str(), &endp, 10);
+        if (endp != v.id.c_str() && *endp == '\0' && n > maxId) maxId = (int)n;
+    }
+    return maxId + 1;
+}
+
 /// what p() needs to answer, a sorted copy of the column being worked on
 struct EvalCtx {
     const std::vector<double>* sorted = nullptr;
@@ -129,6 +177,60 @@ inline std::vector<formula::Var> buildVars(const Stats& st) {
         {"min", st.min},   {"max", st.max},       {"sum", st.sum},
         {"p25", st.p25},   {"p75", st.p75},
     };
+}
+
+/// @brief pull one of kVariableNames out of a Stats, by its index
+inline double variableValue(const Stats& st, int idx) {
+    switch (idx) {
+        case 0: return (double)st.n;
+        case 1: return st.mean;
+        case 2: return st.median;
+        case 3: return st.stdev;
+        case 4: return st.min;
+        case 5: return st.max;
+        case 6: return st.sum;
+        case 7: return st.p25;
+        case 8: return st.p75;
+    }
+    return 0.0;
+}
+
+/// @brief names a variable formula can use, x is whichever stat you picked
+/// no i here, there's no point to index into
+inline std::vector<formula::Var> buildVariableVars(const Stats& st, double x) {
+    return {
+        {"x", x},
+        {"n", (double)st.n},
+        {"mean", st.mean}, {"median", st.median}, {"stdev", st.stdev},
+        {"min", st.min},   {"max", st.max},       {"sum", st.sum},
+        {"p25", st.p25},   {"p75", st.p75},
+    };
+}
+
+/// @brief run one formula over a single stat of a column
+/// @param varIdx which of kVariableNames gets bound to x
+/// @param err    the error if it won't parse, cleared on success
+/// @return the number, or 0 with err set
+inline double applyVariableFormula(const std::vector<double>& src,
+                                   const std::string& valueExpr,
+                                   const Stats& st,
+                                   int varIdx,
+                                   std::string& err) {
+    err.clear();
+    if (src.empty()) { err = "the column is empty"; return 0.0; }
+
+    // p() wants a sorted copy the same way the series version does
+    std::vector<double> sorted = src;
+    std::sort(sorted.begin(), sorted.end());
+    EvalCtx ctx;
+    ctx.sorted = &sorted;
+
+    std::vector<formula::Var> vars = buildVariableVars(st, variableValue(st, varIdx));
+    const std::string vexpr = valueExpr.empty() ? std::string("x") : valueExpr;
+
+    formula::Result v = formula::eval(vexpr, vars, percentileFn, &ctx);
+    if (!v.ok()) { err = v.error; return 0.0; }
+    return v.value;
 }
 
 /// @brief run both formulas over a column
@@ -209,6 +311,31 @@ inline void restorePublished() {
     for (auto& t : transforms) rebuildPublished(t);
 }
 
+/// @brief rebuild one saved variable's number and drop it in the stat pool
+/// same deal as rebuildPublished, the formula is what we saved so it re-runs
+/// against whatever the strategy loaded this time
+/// @return false if it couldn't be rebuilt, e.g. the source is gone
+inline bool rebuildPublishedVariable(VariableWindow& v) {
+    if (v.publishedName[0] == 0) return false;
+    if (v.selectedSeriesIdx < 0 || v.selectedSeriesIdx >= (int)seriesPool::pool.size()) return false;
+
+    const seriesPool::NamedSeries& src = seriesPool::pool[v.selectedSeriesIdx];
+    if (v.col < 0 || v.col >= src.cols()) return false;
+
+    const std::vector<double>& column = src.data[v.col];
+    std::string err;
+    const double out = applyVariableFormula(column, v.valueExpr, computeStats(column), v.varIdx, err);
+    if (!err.empty()) return false;
+
+    statPool::addStat(v.publishedName, out);
+    return true;
+}
+
+/// @brief rebuild every saved variable, for anyone outside the .ini path
+inline void restorePublishedVariables() {
+    for (auto& v : variables) rebuildPublishedVariable(v);
+}
+
 /// @brief draw one row of the before/after table
 inline void statRow(const char* label, double before, double after, bool isCount) {
     ImGui::TableNextRow();
@@ -244,7 +371,7 @@ inline void renderHelp() {
         "\n"
         "Operators:  + - * / % ^   < <= > >= == !=   && || !   cond ? a : b\n"
         "Functions:  abs sqrt log log10 exp floor ceil round sign\n"
-        "            sin cos tan   pow(a,b) min(a,b) max(a,b)\n"
+        "            sin cos tan tanh   pow(a,b) min(a,b) max(a,b)\n"
         "            clamp(v,lo,hi)  if(cond,a,b)\n"
         "\n"
         "Value examples:\n"
@@ -273,7 +400,9 @@ inline void renderTransforms() {
     for (int ti = 0; ti < (int)transforms.size(); ) {
         TransformWindow& t = transforms[ti];
         const std::string uid = "##tf_" + t.id;
-        const std::string title = "Transform " + t.id + "###transform_" + t.id;
+        // the ### id stays "transform_", renaming the visible half only, so
+        // window positions already in the .ini still match up
+        const std::string title = "Series Transform " + t.id + "###transform_" + t.id;
 
         bool open = true;
         ImGui::SetNextWindowSize(ImVec2(520, 520), ImGuiCond_FirstUseEver);
@@ -427,6 +556,169 @@ inline void renderTransforms() {
     if (dirty) ImGui::MarkIniSettingsDirty();
 }
 
+/// @brief cheat sheet for the variable window, no per point names in here
+inline void renderVariableHelp() {
+    ImGui::TextDisabled("(?)");
+    if (!ImGui::IsItemHovered()) return;
+    ImGui::BeginTooltip();
+    ImGui::PushTextWrapPos(460.0);
+    ImGui::TextUnformatted(
+        "x is the stat you picked above, the rest are the same column's other stats\n"
+        "\n"
+        "Names:  x   n mean median stdev min max sum p25 p75\n"
+        "Percentile:  p(k) for any k from 0 to 100, e.g. p(30) p(95) p(99.5)\n"
+        "Constants:  pi e\n"
+        "\n"
+        "Operators:  + - * / % ^   < <= > >= == !=   && || !   cond ? a : b\n"
+        "Functions:  abs sqrt log log10 exp floor ceil round sign\n"
+        "            sin cos tan tanh   pow(a,b) min(a,b) max(a,b)\n"
+        "            clamp(v,lo,hi)  if(cond,a,b)\n"
+        "\n"
+        "Examples:\n"
+        "  x                   the stat on its own\n"
+        "  mean / stdev        a crude signal to noise\n"
+        "  max - min           the range\n"
+        "  p75 - p25           interquartile range\n"
+        "  (mean - median) / stdev   how skewed it looks\n"
+        "  x / n               per point share");
+    ImGui::PopTextWrapPos();
+    ImGui::EndTooltip();
+}
+
+/// @brief render every open variable window for this frame
+/// mostly the same shape as renderTransforms, minus the keep formula and the plot
+inline void renderVariables() {
+    bool dirty = false;
+
+    for (int vi = 0; vi < (int)variables.size(); ) {
+        VariableWindow& v = variables[vi];
+        const std::string uid = "##vf_" + v.id;
+        const std::string title = "Variable Transform " + v.id + "###variable_" + v.id;
+
+        bool open = true;
+        ImGui::SetNextWindowSize(ImVec2(440, 300), ImGuiCond_FirstUseEver);
+        ImGui::Begin(title.c_str(), &open);
+
+        // source series
+        const bool haveSel = v.selectedSeriesIdx >= 0
+                          && v.selectedSeriesIdx < (int)seriesPool::pool.size();
+        const char* preview = haveSel ? seriesPool::pool[v.selectedSeriesIdx].name.c_str()
+                                      : "(select series)";
+        ImGui::SetNextItemWidth(200);
+        if (ImGui::BeginCombo(("##src" + uid).c_str(), preview)) {
+            for (int i = 0; i < (int)seriesPool::pool.size(); i++) {
+                const bool selected = (i == v.selectedSeriesIdx);
+                if (ImGui::Selectable(seriesPool::pool[i].name.c_str(), selected)) {
+                    v.selectedSeriesIdx = i;
+                    v.col = 0;
+                    dirty = true;
+                }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        if (!haveSel) {
+            ImGui::TextDisabled("pick a series to pull a variable from");
+            ImGui::End();
+            if (!open) variables.erase(variables.begin() + vi); else ++vi;
+            continue;
+        }
+
+        auto& series = seriesPool::pool[v.selectedSeriesIdx];
+        if (series.cols() == 0) {
+            ImGui::TextDisabled("(series has no data)");
+            ImGui::End();
+            if (!open) variables.erase(variables.begin() + vi); else ++vi;
+            continue;
+        }
+        if (v.col >= series.cols()) v.col = 0;
+        if (series.cols() > 1) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(140);
+            if (ImGui::BeginCombo(("##col" + uid).c_str(), series.colName(v.col).c_str())) {
+                for (int c = 0; c < series.cols(); c++)
+                    if (ImGui::Selectable(series.colName(c).c_str(), c == v.col)) { v.col = c; dirty = true; }
+                ImGui::EndCombo();
+            }
+        }
+        ImGui::SameLine();
+        renderVariableHelp();
+
+        const std::vector<double>& src = series.data[v.col];
+        const Stats st = computeStats(src);
+
+        // which stat feeds x
+        ImGui::SeparatorText("Variable");
+        if (v.varIdx < 0 || v.varIdx >= kVariableCount) v.varIdx = 1;
+        ImGui::SetNextItemWidth(140);
+        if (ImGui::BeginCombo(("##var" + uid).c_str(), kVariableNames[v.varIdx])) {
+            for (int i = 0; i < kVariableCount; i++)
+                if (ImGui::Selectable(kVariableNames[i], i == v.varIdx)) { v.varIdx = i; dirty = true; }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("x = %.4f", variableValue(st, v.varIdx));
+
+        ImGui::SeparatorText("Formula");
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::InputTextWithHint(("##value" + uid).c_str(), "x",
+                                     v.valueExpr, sizeof(v.valueExpr))) dirty = true;
+
+        std::string err;
+        const double out = applyVariableFormula(src, v.valueExpr, st, v.varIdx, err);
+
+        ImGui::SeparatorText("Result");
+        if (!err.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95, 0.45, 0.40, 1.0));
+            ImGui::TextWrapped("%s", err.c_str());
+            ImGui::PopStyleColor();
+        } else {
+            ImGui::Text("%.6f", out);
+        }
+
+        // saving drops the number into the stat pool, so it shows up in the
+        // statistic explorer widget. the formula is what persists, the number
+        // gets rebuilt next launch
+        ImGui::SeparatorText("Save");
+        if (v.publishedName[0] != '\0') {
+            ImGui::Text("saved as \"%s\", rebuilt on every launch", v.publishedName);
+            if (ImGui::Button(("Update now" + uid).c_str()) && err.empty())
+                statPool::addStat(v.publishedName, out);
+            ImGui::SameLine();
+            if (ImGui::Button(("Stop saving" + uid).c_str())) {
+                v.publishedName[0] = '\0';
+                dirty = true;
+            }
+        } else {
+            ImGui::SetNextItemWidth(200);
+            if (ImGui::InputTextWithHint(("##name" + uid).c_str(), "new stat name",
+                                         v.outName, sizeof(v.outName))) dirty = true;
+            ImGui::SameLine();
+            const bool named = v.outName[0] != '\0';
+            ImGui::BeginDisabled(!named || !err.empty());
+            if (ImGui::Button(("Save to stats" + uid).c_str())) {
+                statPool::addStat(std::string(v.outName), out);
+                for (size_t k = 0; k < sizeof(v.publishedName); k++)
+                    v.publishedName[k] = k < sizeof(v.outName) ? v.outName[k] : '\0';
+                v.publishedName[sizeof(v.publishedName) - 1] = '\0';
+                dirty = true;
+            }
+            ImGui::EndDisabled();
+            if (!named && err.empty()) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("(name it first)");
+            }
+        }
+
+        ImGui::End();
+        if (!open) { variables.erase(variables.begin() + vi); dirty = true; }
+        else ++vi;
+    }
+
+    if (dirty) ImGui::MarkIniSettingsDirty();
+}
+
 inline void* iniReadOpen(ImGuiContext*, ImGuiSettingsHandler*, const char* name) {
     newTransform(name);
     return (void*)findTransform(name);
@@ -490,6 +782,77 @@ inline void registerSettingsHandler() {
     h.ReadOpenFn = iniReadOpen;
     h.ReadLineFn = iniReadLine;
     h.WriteAllFn = iniWriteAll;
+    ImGui::AddSettingsHandler(&h);
+}
+
+inline void* iniReadOpenVariable(ImGuiContext*, ImGuiSettingsHandler*, const char* name) {
+    newVariable(name);
+    return (void*)findVariable(name);
+}
+
+/// @brief one key per line, same reason as the series version
+inline void iniReadLineVariable(ImGuiContext*, ImGuiSettingsHandler*, void* entry, const char* line) {
+    if (!entry) return;
+    VariableWindow& v = *(VariableWindow*)entry;
+    const std::string ln(line);
+    const size_t eq = ln.find('=');
+    if (eq == std::string::npos) return;
+    const std::string key = ln.substr(0, eq);
+    const std::string val = ln.substr(eq + 1);
+
+    auto copyInto = [](char* dst, size_t cap, const std::string& s) {
+        const size_t n = s.size() < cap - 1 ? s.size() : cap - 1;
+        for (size_t i = 0; i < n; i++) dst[i] = s[i];
+        dst[n] = '\0';
+    };
+
+    if      (key == "Series") {
+        for (int i = 0; i < (int)seriesPool::pool.size(); i++)
+            if (seriesPool::pool[i].name == val) { v.selectedSeriesIdx = i; break; }
+    }
+    else if (key == "Col")   v.col = std::atoi(val.c_str());
+    // stored by name, so reordering kVariableNames later doesn't silently
+    // repoint every saved window at a different stat
+    else if (key == "Var") {
+        for (int i = 0; i < kVariableCount; i++)
+            if (val == kVariableNames[i]) { v.varIdx = i; break; }
+    }
+    else if (key == "Value") copyInto(v.valueExpr, sizeof(v.valueExpr), val);
+    else if (key == "Saved") {
+        copyInto(v.publishedName, sizeof(v.publishedName), val);
+        // Saved comes last so everything else is set, and the statistic
+        // explorer looks its stats up by name while reading its own section,
+        // so the stat has to be in the pool by then
+        rebuildPublishedVariable(v);
+    }
+}
+
+inline void iniWriteAllVariable(ImGuiContext*, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf) {
+    for (auto& v : variables) {
+        buf->appendf("[%s][%s]\n", handler->TypeName, v.id.c_str());
+        const std::string name = (v.selectedSeriesIdx >= 0
+                               && v.selectedSeriesIdx < (int)seriesPool::pool.size())
+            ? seriesPool::pool[v.selectedSeriesIdx].name : "";
+        buf->appendf("Series=%s\n", name.c_str());
+        buf->appendf("Col=%d\n", v.col);
+        buf->appendf("Var=%s\n", (v.varIdx >= 0 && v.varIdx < kVariableCount)
+                                 ? kVariableNames[v.varIdx] : kVariableNames[1]);
+        buf->appendf("Value=%s\n", v.valueExpr);
+        // keep Saved last, the reader rebuilds off this key
+        buf->appendf("Saved=%s\n", v.publishedName);
+        buf->appendf("\n");
+    }
+}
+
+/// @brief same hook for the variable windows
+/// register it before the widgets, they resolve stats by name while reading
+inline void registerVariableSettingsHandler() {
+    ImGuiSettingsHandler h;
+    h.TypeName   = "AZVariable";
+    h.TypeHash   = ImHashStr("AZVariable");
+    h.ReadOpenFn = iniReadOpenVariable;
+    h.ReadLineFn = iniReadLineVariable;
+    h.WriteAllFn = iniWriteAllVariable;
     ImGui::AddSettingsHandler(&h);
 }
 
