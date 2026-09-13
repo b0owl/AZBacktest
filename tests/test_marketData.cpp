@@ -450,6 +450,28 @@ TEST(seekToRewindsToAPreviousOffset) {
     CHECK_EQ(again->price, "5000.50");   // same row a second time
 }
 
+TEST(setCursorSeeksByRowCount) {
+    useFixtureMapping();
+    TempCsv csv(azt::basicTicks());
+    MarketData md(csv.path());
+
+    auto row0 = md.nextTick();
+    REQUIRE(row0.has_value());
+    auto row1 = md.nextTick();
+    REQUIRE(row1.has_value());
+    CHECK_NE(row0->price, row1->price);
+
+    md.setCursor(1); // back to row 1, by row count rather than byte offset
+    auto again = md.nextTick();
+    REQUIRE(again.has_value());
+    CHECK_EQ(again->price, row1->price);
+
+    md.setCursor(0); // and all the way back to row 0
+    auto again0 = md.nextTick();
+    REQUIRE(again0.has_value());
+    CHECK_EQ(again0->price, row0->price);
+}
+
 // skipLine runs _skipHeaderOnce() first, so on a fresh reader the FIRST call
 // eats the header and a data row, same "header skipped on first call" rule
 // nextTick follows. later calls drop one row each

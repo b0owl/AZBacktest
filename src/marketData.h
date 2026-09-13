@@ -500,6 +500,16 @@ public:
                 mdDetail::field(lastLine, lastEol, kCSVMapping.restingAskCol), t.restingAsks);
         return t;
     }
+
+    void setCursor(int rowCount) {
+        const char* eol = mdDetail::findEOL(_base, _end);
+        _cur = (eol < _end) ? eol + 1 : _end; // skip header
+        _consumedHeader = true;
+        for (int i = 0; i < rowCount && _cur < _end; ++i) {
+            eol = mdDetail::findEOL(_cur, _end);
+            _cur = (eol < _end) ? eol + 1 : _end;
+        }
+    }
 };
 
 /// @brief true if `path` ends in ".parquet" (case-sensitive), used by MarketData
@@ -654,5 +664,15 @@ public:
         if (_pq) return _pq->nextClose(seconds);
 #endif
         return _csv->nextClose(seconds);
+    }
+
+    /// @brief seek to the rowCount-th data row (0-indexed, header not counted)
+    void setCursor(int rowCount) {
+#ifdef AZBT_PARQUET
+        // Parquet's byteOffset/seekTo are already row indices (_absoluteRow),
+        // not byte offsets, so seekTo doubles as row-count seeking here
+        if (_pq) { _pq->seekTo(static_cast<std::size_t>(rowCount)); return; }
+#endif
+        _csv->setCursor(rowCount);
     }
 };
