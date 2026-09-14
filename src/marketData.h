@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #ifdef _WIN32
   #ifndef WIN32_LEAN_AND_MEAN
@@ -311,6 +312,19 @@ private:
     int _missCount = 0;
     static constexpr int _rollThreshold = 200;
 
+    std::vector<const char*> _lineIndex;
+
+    void _buildLineIndex() {
+        if (!_lineIndex.empty() || _base == _end) return;
+        const char* eol = mdDetail::findEOL(_base, _end);
+        const char* p = (eol < _end) ? eol + 1 : _end;
+        while (p < _end) {
+            _lineIndex.push_back(p);
+            eol = mdDetail::findEOL(p, _end);
+            p = (eol < _end) ? eol + 1 : _end;
+        }
+    }
+
     void _skipHeaderOnce() {
         if (_consumedHeader) return;
         const char* eol = mdDetail::findEOL(_cur, _end);
@@ -501,13 +515,10 @@ public:
     }
 
     void setCursor(int rowCount) {
-        const char* eol = mdDetail::findEOL(_base, _end);
-        _cur = (eol < _end) ? eol + 1 : _end; // skip header
+        _buildLineIndex();
         _consumedHeader = true;
-        for (int i = 0; i < rowCount && _cur < _end; ++i) {
-            eol = mdDetail::findEOL(_cur, _end);
-            _cur = (eol < _end) ? eol + 1 : _end;
-        }
+        _cur = (rowCount >= 0 && static_cast<std::size_t>(rowCount) < _lineIndex.size())
+            ? _lineIndex[static_cast<std::size_t>(rowCount)] : _end;
     }
 
     /// @brief true if the row currently under the cursor's symbol column
