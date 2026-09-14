@@ -8,6 +8,8 @@
 #     Build and run every tests/test_*.cpp, one binary each, and report a summary.
 #   build.sh -clean
 #     Sweep leftover .build_*.exe artifacts from interrupted runs across the project.
+#   build.sh -zip
+#     Run the amalgamation, then zip the resulting azbacktest/ folder into azbacktest.zip.
 #
 # Behavior:
 #   - Auto-discovers sibling .cpp files matching #include "X.h" directives and links them.
@@ -24,6 +26,7 @@ INVOKE_DIR="$(pwd)"
 RUNFILE=""
 CLEAN=0
 TESTS=0
+ZIP=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -runfile)
@@ -38,9 +41,13 @@ while [[ $# -gt 0 ]]; do
             CLEAN=1
             shift
             ;;
+        -zip)
+            ZIP=1
+            shift
+            ;;
         *)
             echo "unknown arg: $1" >&2
-            echo "usage: build.sh -runfile <path> | -tests | -clean" >&2
+            echo "usage: build.sh -runfile <path> | -tests | -clean | -zip" >&2
             exit 1
             ;;
     esac
@@ -123,6 +130,22 @@ if [[ $TESTS -eq 1 ]]; then
     echo "$suites_failed of $suites_run suite(s) failed:"
     for n in "${failed_names[@]}"; do echo "  - $n"; done
     exit 1
+fi
+
+if [[ $ZIP -eq 1 ]]; then
+    bash "$SCRIPT_DIR/amalgamate.sh"
+    ZIP_PATH="$PROJECT_ROOT/azbacktest.zip"
+    rm -f "$ZIP_PATH"
+    if command -v zip >/dev/null 2>&1; then
+        (cd "$PROJECT_ROOT" && zip -rq "$ZIP_PATH" azbacktest)
+    else
+        # git-bash/MSYS doesn't ship zip by default, fall back to PowerShell
+        WIN_SRC="$(cygpath -w "$PROJECT_ROOT/azbacktest")"
+        WIN_DST="$(cygpath -w "$ZIP_PATH")"
+        powershell.exe -NoProfile -Command "Compress-Archive -Path '$WIN_SRC' -DestinationPath '$WIN_DST' -Force"
+    fi
+    echo "wrote $ZIP_PATH"
+    exit 0
 fi
 
 if [[ -z "$RUNFILE" ]] && [[ $CLEAN -eq 0 ]]; then
