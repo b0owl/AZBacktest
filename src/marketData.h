@@ -1,7 +1,6 @@
 // I genuinely have no clue how to do this file stuff
-// so claude did it for me... sorry
-// yes i am that lazy
-// be thankful i opensourced this for yall
+// so claude did (most) of it. Methods added recently are likely human written
+// writing this as of september 14th 2026, for the record
 
 #pragma once
 
@@ -510,6 +509,17 @@ public:
             _cur = (eol < _end) ? eol + 1 : _end;
         }
     }
+
+    /// @brief true if the row currently under the cursor's symbol column
+    /// exactly matches `contract` (e.g. "MNQH5"), just peeks, doesnt consume
+    /// the row or move the cursor
+    /// @param contract the exact contract to check for
+    bool rowMatchesContract(std::string_view contract) {
+        _skipHeaderOnce();
+        if (kCSVMapping.symbolCol < 0 || _cur >= _end) return false;
+        const char* eol = mdDetail::findEOL(_cur, _end);
+        return mdDetail::field(_cur, eol, kCSVMapping.symbolCol) == contract;
+    }
 };
 
 /// @brief true if `path` ends in ".parquet" (case-sensitive), used by MarketData
@@ -674,5 +684,13 @@ public:
         if (_pq) { _pq->seekTo(static_cast<std::size_t>(rowCount)); return; }
 #endif
         _csv->setCursor(rowCount);
+    }
+
+    /// @brief true if the row under the cursor matches `contract` 
+    bool rowMatchesContract(std::string_view contract) {
+#ifdef AZBT_PARQUET
+        if (_pq) return _pq->rowMatchesContract(contract);
+#endif
+        return _csv->rowMatchesContract(contract);
     }
 };
