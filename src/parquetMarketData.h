@@ -276,6 +276,14 @@ public:
     std::size_t byteOffset() const { return static_cast<std::size_t>(_absoluteRow); }
     void seekTo(std::size_t off)   { _absoluteRow = static_cast<int64_t>(off); }
 
+    /// @brief true if the row under the cursor's symbol column exactly matches
+    /// `contract` (e.g. "MNQH5"), just peeks, doesnt advance _absoluteRow
+    bool rowMatchesContract(std::string_view contract) {
+        if (kCSVMapping.symbolCol < 0 || _absoluteRow >= _totalRows) return false;
+        ensureRowLoaded(_absoluteRow);
+        return curSymbol() == contract;
+    }
+
     std::optional<Tick> nextTick() {
         if (!advanceToNextMatch()) return std::nullopt;
 
