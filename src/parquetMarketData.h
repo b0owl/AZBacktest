@@ -284,6 +284,17 @@ public:
         return curSymbol() == contract;
     }
 
+    /// @brief the symbol/contract of the rowCount-th row (0-indexed), leaves
+    /// _absoluteRow wherever it was
+    std::string_view contractAt(int rowCount) {
+        if (kCSVMapping.symbolCol < 0 || rowCount < 0 || rowCount >= _totalRows) return {};
+        int64_t saved = _absoluteRow;
+        ensureRowLoaded(rowCount);
+        std::string_view sym = curSymbol();
+        _absoluteRow = saved;
+        return sym;
+    }
+
     std::optional<Tick> nextTick() {
         if (!advanceToNextMatch()) return std::nullopt;
 

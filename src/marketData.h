@@ -520,6 +520,24 @@ public:
         const char* eol = mdDetail::findEOL(_cur, _end);
         return mdDetail::field(_cur, eol, kCSVMapping.symbolCol) == contract;
     }
+
+    /// @brief the symbol column of the rowCount-th data row (0-indexed, header
+    /// not counted), leaves the cursor wherever it was
+    /// @param rowCount which row to read
+    std::string_view contractAt(int rowCount) {
+        if (kCSVMapping.symbolCol < 0) return {};
+        const char* savedCur = _cur;
+        bool savedHeader = _consumedHeader;
+        setCursor(rowCount);
+        std::string_view sym;
+        if (_cur < _end) {
+            const char* eol = mdDetail::findEOL(_cur, _end);
+            sym = mdDetail::field(_cur, eol, kCSVMapping.symbolCol);
+        }
+        _cur = savedCur;
+        _consumedHeader = savedHeader;
+        return sym;
+    }
 };
 
 /// @brief true if `path` ends in ".parquet" (case-sensitive), used by MarketData
@@ -692,5 +710,14 @@ public:
         if (_pq) return _pq->rowMatchesContract(contract);
 #endif
         return _csv->rowMatchesContract(contract);
+    }
+
+    /// @brief the symbol/contract of the rowCount-th data row (0-indexed,
+    /// header not counted), leaves the cursor wherever it was
+    std::string_view contractAt(int rowCount) {
+#ifdef AZBT_PARQUET
+        if (_pq) return _pq->contractAt(rowCount);
+#endif
+        return _csv->contractAt(rowCount);
     }
 };
