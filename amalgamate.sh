@@ -12,7 +12,6 @@ OUT="$SCRIPT_DIR/azbacktest.h"
     echo "// Do not edit directly, modify the source files in src/ instead"
     echo "// (unless you know what you're doing, of course)"
     echo ""
-    echo "// mapping is... somewhere below. Sorry! (search for kCSVMapping)"
     echo "#pragma once"
     echo ""
     # Amalgamation merges every vendor .cpp into one TU and strips local
