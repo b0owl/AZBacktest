@@ -96,6 +96,12 @@ unknownSideAggressorAlias = "N"
 restingBidCol = -1
 restingAskCol = -1
 
+# best bid/ask price columns (set to -1 to disable)
+# quote snapshots at the time of each row, on Databento TBBO these are
+# bid_px_00 / ask_px_00. Parquet sources need them as doubles
+bidPriceCol = -1
+askPriceCol = -1
+
 # trading costs (all in pts)
 commission = 0.0
 spread     = 0.0

@@ -55,6 +55,13 @@ struct CSVMapping {
     int restingBidCol;                               // column index of the resting bid size, -1 to disable
     int restingAskCol;                               // column index of the resting ask size, -1 to disable
 
+    // best bid/ask price columns, a per-row snapshot of the quote at the time of
+    // the trade (on Databento TBBO these are bid_px_00 / ask_px_00). unlike the
+    // resting columns these are prices, so Parquet sources need them as doubles
+    // defaulted off (-1) so configs that dont set them still work
+    int bidPriceCol;                                 // column index of the best bid price, -1 to disable
+    int askPriceCol;                                 // column index of the best ask price, -1 to disable
+
     double commision;                                 // commision, pts
     double spread;                                    // spread, pts
     double timingCost;                                // how much do you lose from latency? (pts)
@@ -78,6 +85,7 @@ inline CSVMapping kCSVMapping{
     -1, "", false,             // symbol filtering disabled
     -1, "B", "S", "N",        // aggressor disabled, default aliases
     -1, -1,                    // resting bid/ask columns disabled
+    -1, -1,                    // bid/ask price columns disabled
     0.f, 0.f, 0.f             // costs
 };
 
@@ -113,6 +121,12 @@ unknownSideAggressorAlias = "N"
 # these are book snapshots, not traded volume
 restingBidCol = -1
 restingAskCol = -1
+
+# best bid/ask price columns, set to -1 to disable
+# quote snapshots at the time of each row, on Databento TBBO these are
+# bid_px_00 / ask_px_00
+bidPriceCol = -1
+askPriceCol = -1
 
 # trading costs (all in pts)
 commission = 0.0
@@ -177,6 +191,9 @@ inline void loadConfig(const char* tomlPath = "config.toml") {
 
     kCSVMapping.restingBidCol = toml::getInt(cfg, "", "restingBidCol", -1);
     kCSVMapping.restingAskCol = toml::getInt(cfg, "", "restingAskCol", -1);
+
+    kCSVMapping.bidPriceCol = toml::getInt(cfg, "", "bidPriceCol", -1);
+    kCSVMapping.askPriceCol = toml::getInt(cfg, "", "askPriceCol", -1);
 
     kCSVMapping.commision  = toml::getFloat(cfg, "", "commission", 0.f);
     kCSVMapping.spread     = toml::getFloat(cfg, "", "spread", 0.f);

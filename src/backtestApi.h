@@ -60,6 +60,9 @@ enum class TradeDirection { Long, Short };
 /// restingBids/restingAsks are top-of-book size sitting unfilled rather than
 /// volume that traded, so they don't participate in that sum and aren't summed
 /// across a bar either, at timeframe>0 they're the closing tick's book snapshot
+/// bidPrices/askPrices are the best quote at each row, same snapshot rules (the
+/// closing tick's quote at timeframe>0), and stay 0 when bidPriceCol/askPriceCol
+/// aren't mapped
 /// every vector here is the same length and indexed the same way, so
 /// executedBuys[i] always belongs to prices[i]
 struct DataWindow {
@@ -70,6 +73,8 @@ struct DataWindow {
     std::vector<double> deltas;
     std::vector<double> restingBids;   // volume resting on the bid
     std::vector<double> restingAsks;   // volume resting on the ask
+    std::vector<double> bidPrices;     // best bid price
+    std::vector<double> askPrices;     // best ask price
 };
 
 class Trade {
@@ -223,7 +228,7 @@ public:
     /// @brief pull `period` bars from the market data source, if timeframe is 0
     /// it reads raw ticks; otherwise it reads closes at that many seconds per bar.
     /// returns parallel prices + volumes + executedBuys/executedSells + deltas
-    /// + restingBids/restingAsks, callers usually std::move prices into their
+    /// + restingBids/restingAsks + bidPrices/askPrices, callers usually std::move prices into their
     /// `Handling`-bound vector and feed volumes into returnVolumeProfile
     /// @param md       the MarketData source to read from
     /// @param period   how many rows/bars to load
@@ -239,6 +244,8 @@ public:
         out.deltas.reserve(period);
         out.restingBids.reserve(period);
         out.restingAsks.reserve(period);
+        out.bidPrices.reserve(period);
+        out.askPrices.reserve(period);
         windowTimestamps.clear();
         windowTimestamps.reserve(period);
 
@@ -268,6 +275,8 @@ public:
                 // columns aren't mapped in config.toml
                 out.restingBids.push_back(tick->restingBids);
                 out.restingAsks.push_back(tick->restingAsks);
+                out.bidPrices.push_back(tick->bidPrice);
+                out.askPrices.push_back(tick->askPrice);
 
                 processedBars++;
             }
@@ -290,6 +299,8 @@ public:
                 // closing tick's book, not a bar aggregate, see DataWindow
                 out.restingBids.push_back(bar->restingBids);
                 out.restingAsks.push_back(bar->restingAsks);
+                out.bidPrices.push_back(bar->bidPrice);
+                out.askPrices.push_back(bar->askPrice);
 
                 processedBars++;
             }

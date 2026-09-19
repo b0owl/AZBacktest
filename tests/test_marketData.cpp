@@ -263,6 +263,48 @@ TEST(nextTickRestingBidMappedAskUnmapped) {
     CHECK_F(t->restingAsks, 0.0);
 }
 
+TEST(nextTickReadsBidAndAskPrice) {
+    useFixtureMapping();
+    TempCsv csv(azt::basicTicks());
+    MarketData md(csv.path());
+
+    const double wantBid[6] = {5000.00, 5000.25, 5000.50, 5000.75, 5000.25, 5000.00};
+    const double wantAsk[6] = {5000.50, 5000.75, 5001.00, 5001.25, 5000.75, 5000.50};
+    for (int i = 0; i < 6; i++) {
+        auto t = md.nextTick();
+        REQUIRE(t.has_value());
+        CHECK_F(t->bidPrice, wantBid[i]);
+        CHECK_F(t->askPrice, wantAsk[i]);
+    }
+}
+
+TEST(nextTickBidAskPriceAreZeroWhenUnmapped) {
+    useFixtureMapping();
+    kCSVMapping.bidPriceCol = -1;
+    kCSVMapping.askPriceCol = -1;
+    TempCsv csv(azt::basicTicks());
+    MarketData md(csv.path());
+
+    auto t = md.nextTick();
+    REQUIRE(t.has_value());
+    CHECK_F(t->bidPrice, 0.0);
+    CHECK_F(t->askPrice, 0.0);
+    CHECK_F(t->restingBids, 40.0); // the rest of the row still parses
+}
+
+// independent columns, like the resting sizes
+TEST(nextTickBidPriceMappedAskPriceUnmapped) {
+    useFixtureMapping();
+    kCSVMapping.askPriceCol = -1;
+    TempCsv csv(azt::basicTicks());
+    MarketData md(csv.path());
+
+    auto t = md.nextTick();
+    REQUIRE(t.has_value());
+    CHECK_F(t->bidPrice, 5000.00);
+    CHECK_F(t->askPrice, 0.0);
+}
+
 TEST(nextTickReturnsNulloptAtEof) {
     useFixtureMapping();
     TempCsv csv(azt::basicTicks());
@@ -335,6 +377,38 @@ TEST(nextCloseRestingSizesComeFromClosingRowNotSummed) {
     REQUIRE(bar2.has_value());
     CHECK_F(bar2->restingBids, 30.0);
     CHECK_F(bar2->restingAsks, 33.0);
+}
+
+// same snapshot rule as the resting sizes: bar 1's rows carry bids
+// 5000.00/.25/.50/.75, a sum or average would not land on the close's 5000.75
+TEST(nextCloseBidAskPriceComeFromClosingRow) {
+    useFixtureMapping();
+    TempCsv csv(azt::basicTicks());
+    MarketData md(csv.path());
+
+    auto bar1 = md.nextClose(60);
+    REQUIRE(bar1.has_value());
+    CHECK_F(bar1->bidPrice, 5000.75);
+    CHECK_F(bar1->askPrice, 5001.25);
+
+    auto bar2 = md.nextClose(60);
+    REQUIRE(bar2.has_value());
+    CHECK_F(bar2->bidPrice, 5000.00);
+    CHECK_F(bar2->askPrice, 5000.50);
+}
+
+TEST(nextCloseBidAskPriceAreZeroWhenUnmapped) {
+    useFixtureMapping();
+    kCSVMapping.bidPriceCol = -1;
+    kCSVMapping.askPriceCol = -1;
+    TempCsv csv(azt::basicTicks());
+    MarketData md(csv.path());
+
+    auto bar = md.nextClose(60);
+    REQUIRE(bar.has_value());
+    CHECK_F(bar->bidPrice, 0.0);
+    CHECK_F(bar->askPrice, 0.0);
+    CHECK_F(bar->size, 17.0); // aggregation still works
 }
 
 TEST(nextCloseRestingSizesAreZeroWhenUnmapped) {

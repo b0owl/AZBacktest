@@ -46,10 +46,12 @@ public:
 //   col 4  side    B = buy aggressor, A = sell aggressor, anything else unknown
 //   col 5  bidsz   resting bid size
 //   col 6  asksz   resting ask size
+//   col 7  bidpx   best bid price
+//   col 8  askpx   best ask price
 //
 // Note the header row: _MarketData::_skipHeaderOnce() always drops the first
 // line regardless of the skipHeader config flag, so every fixture needs one.
-inline constexpr const char* kFixtureHeader = "ts,symbol,price,size,side,bidsz,asksz\n";
+inline constexpr const char* kFixtureHeader = "ts,symbol,price,size,side,bidsz,asksz,bidpx,askpx\n";
 
 /// @brief point the global kCSVMapping at the layout above. Call it at the top
 /// of any test that reads data, then tweak individual fields for what the test
@@ -78,6 +80,9 @@ inline void useFixtureMapping() {
     kCSVMapping.restingBidCol = 5;
     kCSVMapping.restingAskCol = 6;
 
+    kCSVMapping.bidPriceCol = 7;
+    kCSVMapping.askPriceCol = 8;
+
     kCSVMapping.commision  = 0.f;
     kCSVMapping.spread     = 0.f;
     kCSVMapping.timingCost = 0.f;
@@ -86,19 +91,19 @@ inline void useFixtureMapping() {
 /// @brief six trades spanning ~2 minutes, one of them with an unclassifiable
 /// side. Laid out so that nextClose(60) produces exactly two bars:
 ///
-///   bar 1  rows 0-3  vol 17  buys 8  sells 7  unknown 2  close 5001.00  book 60/20
-///   bar 2  rows 4-5  vol 10  buys 6  sells 4  unknown 0  close 5000.25  book 30/33
+///   bar 1  rows 0-3  vol 17  buys 8  sells 7  unknown 2  close 5001.00  book 60/20  quote 5000.75/5001.25
+///   bar 2  rows 4-5  vol 10  buys 6  sells 4  unknown 0  close 5000.25  book 30/33  quote 5000.00/5000.50
 ///
-/// the resting sizes deliberately move every row, so a test can tell a close
-/// row snapshot apart from a sum or an average across the bar
+/// the resting sizes and the quote deliberately move every row, so a test can
+/// tell a close row snapshot apart from a sum or an average across the bar
 inline std::string basicTicks() {
     return std::string(kFixtureHeader) +
-        "2025-06-01T22:00:00.000000000Z,ESM5,5000.25,3,B,40,55\n"
-        "2025-06-01T22:00:10.000000000Z,ESM5,5000.50,7,A,41,52\n"
-        "2025-06-01T22:00:30.000000000Z,ESM5,5000.75,2,X,45,50\n"
-        "2025-06-01T22:01:05.000000000Z,ESM5,5001.00,5,B,60,20\n"
-        "2025-06-01T22:01:40.000000000Z,ESM5,5000.50,4,A,61,19\n"
-        "2025-06-01T22:02:10.000000000Z,ESM5,5000.25,6,B,30,33\n";
+        "2025-06-01T22:00:00.000000000Z,ESM5,5000.25,3,B,40,55,5000.00,5000.50\n"
+        "2025-06-01T22:00:10.000000000Z,ESM5,5000.50,7,A,41,52,5000.25,5000.75\n"
+        "2025-06-01T22:00:30.000000000Z,ESM5,5000.75,2,X,45,50,5000.50,5001.00\n"
+        "2025-06-01T22:01:05.000000000Z,ESM5,5001.00,5,B,60,20,5000.75,5001.25\n"
+        "2025-06-01T22:01:40.000000000Z,ESM5,5000.50,4,A,61,19,5000.25,5000.75\n"
+        "2025-06-01T22:02:10.000000000Z,ESM5,5000.25,6,B,30,33,5000.00,5000.50\n";
 }
 
 } // namespace azt

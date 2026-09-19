@@ -61,6 +61,7 @@ private:
     std::vector<int> _neededCols;          // sorted, deduped parquet column indices to fetch
     int _tsPos = -1, _pxPos = -1, _szPos = -1, _symPos = -1, _aggPos = -1; // position within _neededCols
     int _bidPos = -1, _askPos = -1;        // resting bid/ask size, -1 when not configured
+    int _bidPxPos = -1, _askPxPos = -1;    // best bid/ask price, -1 when not configured
     long long _tsUnitMul = 1;              // multiplier from the timestamp column's unit to nanoseconds
 
     int _curGroup = -1;
@@ -72,6 +73,8 @@ private:
     std::shared_ptr<arrow::Array> _aggArr;
     std::shared_ptr<arrow::Int64Array> _bidArr;
     std::shared_ptr<arrow::Int64Array> _askArr;
+    std::shared_ptr<arrow::DoubleArray> _bidPxArr;
+    std::shared_ptr<arrow::DoubleArray> _askPxArr;
     bool _symLarge = false, _aggLarge = false;
     int64_t _rowInGroup = 0;
 
@@ -105,6 +108,10 @@ private:
             ? std::static_pointer_cast<arrow::Int64Array>(_table->column(_bidPos)->chunk(0)) : nullptr;
         _askArr = _askPos >= 0
             ? std::static_pointer_cast<arrow::Int64Array>(_table->column(_askPos)->chunk(0)) : nullptr;
+        _bidPxArr = _bidPxPos >= 0
+            ? std::static_pointer_cast<arrow::DoubleArray>(_table->column(_bidPxPos)->chunk(0)) : nullptr;
+        _askPxArr = _askPxPos >= 0
+            ? std::static_pointer_cast<arrow::DoubleArray>(_table->column(_askPxPos)->chunk(0)) : nullptr;
     }
 
     void ensureRowLoaded(int64_t rowIdx) {
@@ -132,6 +139,8 @@ private:
     // 0 when the column isn't configured, matching Tick's default and the CSV path
     double curRestingBid() const { return _bidArr ? static_cast<double>(_bidArr->Value(_rowInGroup)) : 0.0; }
     double curRestingAsk() const { return _askArr ? static_cast<double>(_askArr->Value(_rowInGroup)) : 0.0; }
+    double curBidPrice()   const { return _bidPxArr ? _bidPxArr->Value(_rowInGroup) : 0.0; }
+    double curAskPrice()   const { return _askPxArr ? _askPxArr->Value(_rowInGroup) : 0.0; }
     long long curTsNanos() const { return static_cast<long long>(_tsArr->Value(_rowInGroup)) * _tsUnitMul; }
 
     // advance past rows that don't match the configured symbol filter, mirrors
@@ -238,11 +247,24 @@ public:
         requireInt64(kCSVMapping.restingBidCol, "restingBidCol");
         requireInt64(kCSVMapping.restingAskCol, "restingAskCol");
 
+        // bid/ask prices are prices, so same double requirement as priceCol
+        auto requireDouble = [&](int col, const char* role) {
+            if (col < 0) return;
+            auto f = requireField(col, role);
+            if (f->type()->id() != arrow::Type::DOUBLE)
+                throw std::runtime_error("ParquetMarketData: " + std::string(role)
+                    + " must be a double column in " + path + " (got " + f->type()->ToString() + ")");
+        };
+        requireDouble(kCSVMapping.bidPriceCol, "bidPriceCol");
+        requireDouble(kCSVMapping.askPriceCol, "askPriceCol");
+
         std::vector<int> cols = { kCSVMapping.timestampCol, kCSVMapping.priceCol, kCSVMapping.sizeCol };
         if (kCSVMapping.symbolCol >= 0) cols.push_back(kCSVMapping.symbolCol);
         if (kCSVMapping.aggressor >= 0) cols.push_back(kCSVMapping.aggressor);
         if (kCSVMapping.restingBidCol >= 0) cols.push_back(kCSVMapping.restingBidCol);
         if (kCSVMapping.restingAskCol >= 0) cols.push_back(kCSVMapping.restingAskCol);
+        if (kCSVMapping.bidPriceCol >= 0) cols.push_back(kCSVMapping.bidPriceCol);
+        if (kCSVMapping.askPriceCol >= 0) cols.push_back(kCSVMapping.askPriceCol);
         std::sort(cols.begin(), cols.end());
         cols.erase(std::unique(cols.begin(), cols.end()), cols.end());
         _neededCols = cols;
@@ -257,6 +279,8 @@ public:
         _aggPos = kCSVMapping.aggressor >= 0 ? posOf(kCSVMapping.aggressor) : -1;
         _bidPos = kCSVMapping.restingBidCol >= 0 ? posOf(kCSVMapping.restingBidCol) : -1;
         _askPos = kCSVMapping.restingAskCol >= 0 ? posOf(kCSVMapping.restingAskCol) : -1;
+        _bidPxPos = kCSVMapping.bidPriceCol >= 0 ? posOf(kCSVMapping.bidPriceCol) : -1;
+        _askPxPos = kCSVMapping.askPriceCol >= 0 ? posOf(kCSVMapping.askPriceCol) : -1;
 
         int numRowGroups = _reader->parquet_reader()->metadata()->num_row_groups();
         _rowGroupOffsets.assign(static_cast<std::size_t>(numRowGroups) + 1, 0);
@@ -318,14 +342,16 @@ public:
 
         t.restingBids = curRestingBid();
         t.restingAsks = curRestingAsk();
+        t.bidPrice    = curBidPrice();
+        t.askPrice    = curAskPrice();
 
         ++_absoluteRow;
         return t;
     }
 
     /// @brief bar close over `seconds`, volume summed and split per aggressor
-    /// side, mirrors _MarketData::nextClose. t.side and the resting sizes are
-    /// the closing row's
+    /// side, mirrors _MarketData::nextClose. t.side, the resting sizes and the
+    /// bid/ask prices are the closing row's
     std::optional<Tick> nextClose(int seconds) {
         if (!advanceToNextMatch()) return std::nullopt;
 
@@ -358,6 +384,7 @@ public:
         // resting sizes are book snapshots, summing them across the bar would be
         // meaningless, so they track the closing row alongside the price
         double lastBid = curRestingBid(), lastAsk = curRestingAsk();
+        double lastBidPx = curBidPrice(), lastAskPx = curAskPrice();
         std::string lastTs = firstTs;
         accumulate();
         ++_absoluteRow;
@@ -369,6 +396,8 @@ public:
             lastPx  = curPrice();
             lastBid = curRestingBid();
             lastAsk = curRestingAsk();
+            lastBidPx = curBidPrice();
+            lastAskPx = curAskPrice();
             accumulate();
             ++_absoluteRow;
         }
@@ -386,6 +415,8 @@ public:
         t.unknownVolume = unknown;
         t.restingBids   = lastBid;
         t.restingAsks   = lastAsk;
+        t.bidPrice      = lastBidPx;
+        t.askPrice      = lastAskPx;
         return t;
     }
 };

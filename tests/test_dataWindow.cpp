@@ -20,6 +20,8 @@ static void checkParallelLengths(const DataWindow& w) {
     CHECK_EQ(w.deltas.size(),        n);
     CHECK_EQ(w.restingBids.size(),   n);
     CHECK_EQ(w.restingAsks.size(),   n);
+    CHECK_EQ(w.bidPrices.size(),     n);
+    CHECK_EQ(w.askPrices.size(),     n);
 }
 
 // ---------------------------------------------------------------- tick mode
@@ -70,6 +72,44 @@ TEST(tickModeCarriesRestingBookThrough) {
     for (int i = 0; i < 6; i++) {
         CHECK_F(w.restingBids[i], wantBid[i]);
         CHECK_F(w.restingAsks[i], wantAsk[i]);
+    }
+}
+
+TEST(tickModeCarriesBidAskPricesThrough) {
+    useFixtureMapping();
+    TempCsv csv(azt::basicTicks());
+    MarketData md(csv.path());
+
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
+    auto w = h.requestDataWindow(md, 10);
+    REQUIRE(w.bidPrices.size() == 6);
+    REQUIRE(w.askPrices.size() == 6);
+
+    const double wantBid[6] = {5000.00, 5000.25, 5000.50, 5000.75, 5000.25, 5000.00};
+    const double wantAsk[6] = {5000.50, 5000.75, 5001.00, 5001.25, 5000.75, 5000.50};
+    for (int i = 0; i < 6; i++) {
+        CHECK_F(w.bidPrices[i], wantBid[i]);
+        CHECK_F(w.askPrices[i], wantAsk[i]);
+    }
+}
+
+// same guarantee as the resting vectors: always pushed, all zero when unmapped
+TEST(tickModeBidAskVectorsStayParallelWhenUnmapped) {
+    useFixtureMapping();
+    kCSVMapping.bidPriceCol = -1;
+    kCSVMapping.askPriceCol = -1;
+    TempCsv csv(azt::basicTicks());
+    MarketData md(csv.path());
+
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
+    auto w = h.requestDataWindow(md, 10);
+
+    checkParallelLengths(w);
+    for (std::size_t i = 0; i < w.bidPrices.size(); i++) {
+        CHECK_F(w.bidPrices[i], 0.0);
+        CHECK_F(w.askPrices[i], 0.0);
     }
 }
 
@@ -286,6 +326,24 @@ TEST(barModeRestingSizesAreTheClosingSnapshot) {
     CHECK_F(w.restingAsks[0], 20.0);
     CHECK_F(w.restingBids[1], 30.0);
     CHECK_F(w.restingAsks[1], 33.0);
+}
+
+// the quote is a snapshot too, bar 1 reports its closing row's 5000.75/5001.25
+TEST(barModeBidAskPricesAreTheClosingSnapshot) {
+    useFixtureMapping();
+    TempCsv csv(azt::basicTicks());
+    MarketData md(csv.path());
+
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
+    auto w = h.requestDataWindow(md, 10, 60);
+
+    REQUIRE(w.prices.size() == 2);
+    CHECK_F(w.bidPrices[0], 5000.75);
+    CHECK_F(w.askPrices[0], 5001.25);
+    CHECK_F(w.bidPrices[1], 5000.00);
+    CHECK_F(w.askPrices[1], 5000.50);
+    checkParallelLengths(w);
 }
 
 TEST(barModeDeltasAreOrderflowDelta) {

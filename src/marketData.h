@@ -51,6 +51,11 @@
 /// They're snapshots, not flow, so unlike the volume splits they're never summed
 /// across a bar, nextClose reports the closing row's book the same way it reports
 /// that row's price. Both stay 0 when the columns aren't configured.
+///
+/// bidPrice/askPrice are the best quote at the time of the row, read from
+/// bidPriceCol/askPriceCol. Same snapshot rules as the resting sizes: never
+/// aggregated, nextClose reports the closing row's quote, and both stay 0 when
+/// the columns aren't configured.
 struct Tick {
     std::string_view timestamp;
     std::string_view price;
@@ -61,6 +66,8 @@ struct Tick {
     double unknownVolume  = 0.0;
     double restingBids    = 0.0;
     double restingAsks    = 0.0;
+    double bidPrice       = 0.0;
+    double askPrice       = 0.0;
 };
 
 namespace mdDetail {
@@ -285,7 +292,7 @@ inline void nFields(const char* start, const char* end, const int* cols, int n,
 
 /// @brief parse a field into `dst`, leaving it untouched if the column wasn't
 /// configured or the row didn't have it. keeps the "0 when disabled" default
-/// that Tick's resting sizes rely on
+/// that Tick's resting sizes and bid/ask prices rely on
 inline void parseOptionalFloat(std::string_view v, double& dst) {
     if (v.empty()) return;
     std::from_chars(v.data(), v.data() + v.size(), dst);
@@ -410,12 +417,13 @@ public:
         _cur = (eol < _end) ? eol + 1 : _end;
         Tick t;
         // one pass over the row for every mapped column, the optional ones
-        // (aggressor, resting sizes) come back empty when their index is -1
-        const int cols[6] = { kCSVMapping.timestampCol, kCSVMapping.priceCol,
+        // (aggressor, resting sizes, bid/ask prices) come back empty when their index is -1
+        const int cols[8] = { kCSVMapping.timestampCol, kCSVMapping.priceCol,
                               kCSVMapping.aggressor,    kCSVMapping.sizeCol,
-                              kCSVMapping.restingBidCol, kCSVMapping.restingAskCol };
-        std::string_view f[6];
-        mdDetail::nFields(line, eol, cols, 6, f);
+                              kCSVMapping.restingBidCol, kCSVMapping.restingAskCol,
+                              kCSVMapping.bidPriceCol,   kCSVMapping.askPriceCol };
+        std::string_view f[8];
+        mdDetail::nFields(line, eol, cols, 8, f);
 
         t.timestamp = f[0];
         t.price     = f[1];
@@ -424,6 +432,8 @@ public:
         std::from_chars(szView.data(), szView.data() + szView.size(), t.size);
         mdDetail::parseOptionalFloat(f[4], t.restingBids);
         mdDetail::parseOptionalFloat(f[5], t.restingAsks);
+        mdDetail::parseOptionalFloat(f[6], t.bidPrice);
+        mdDetail::parseOptionalFloat(f[7], t.askPrice);
         if (kCSVMapping.aggressor >= 0 && sideView == kCSVMapping.buySideAggressorAlias) {
             t.side = kCSVMapping.buySideAggressorAlias;
             t.executedBuys = t.size;
@@ -441,7 +451,8 @@ public:
     /// split across t.executedBuys / t.executedSells / t.unknownVolume by the
     /// aggressor column. t.side is the side of the closing tick specifically
     /// (same row the timestamp and price come from), not the bar as a whole,
-    /// and t.restingBids / t.restingAsks are that same closing row's book
+    /// and t.restingBids / t.restingAsks / t.bidPrice / t.askPrice are that
+    /// same closing row's book and quote
     /// @return the close tick (views into the underlying buffer), or nullopt at EOF
     std::optional<Tick> nextClose(int seconds) {
         _skipHeaderOnce();
@@ -511,6 +522,12 @@ public:
         if (kCSVMapping.restingAskCol >= 0)
             mdDetail::parseOptionalFloat(
                 mdDetail::field(lastLine, lastEol, kCSVMapping.restingAskCol), t.restingAsks);
+        if (kCSVMapping.bidPriceCol >= 0)
+            mdDetail::parseOptionalFloat(
+                mdDetail::field(lastLine, lastEol, kCSVMapping.bidPriceCol), t.bidPrice);
+        if (kCSVMapping.askPriceCol >= 0)
+            mdDetail::parseOptionalFloat(
+                mdDetail::field(lastLine, lastEol, kCSVMapping.askPriceCol), t.askPrice);
         return t;
     }
 
