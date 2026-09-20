@@ -1,13 +1,13 @@
-<img width="2559" height="1417" alt="image" src="https://github.com/user-attachments/assets/b4281c86-cd32-4adc-9f5e-32840e39445a" />
+<img width="2559" height="1417" alt="AZBacktest C++ backtesting framework visualization window built with ImGui and ImPlot" src="https://github.com/user-attachments/assets/b4281c86-cd32-4adc-9f5e-32840e39445a" />
 
 
-# AZBacktest
+# AZBacktest: C++ Backtesting Framework for Tick Data
 
 ### **Docs are in wiki!**
 
 **Before building, edit `config.toml` to map your data columns and set the data path. If the file doesn't exist, the first run will generate one with placeholder values.**
 
-C++17 backtesting framework. Header-only API with an ImGui/ImPlot visualization window.
+AZBacktest is a C++17 backtesting framework for algorithmic trading strategies on tick data. Header-only API (also available as a single-header amalgamation), CSV and Parquet data support (Databento-style formats work out of the box), and an ImGui/ImPlot visualization window.
 
 ## Build
 
