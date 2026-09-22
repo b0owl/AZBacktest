@@ -47,7 +47,7 @@ inline int findEof(const char* path, int timeframe=1, int strideIncrement=2) {
     MarketData first(path);
     auto firstTick = first.nextTick();
     if (!firstTick) return 0;
-    long long startSec = mdDetail::tsToEpochSeconds(firstTick->timestamp);
+    long long startSec = mdDetail::tsToEpochSeconds(firstTick->tsRecv);
 
     // lastValidOff may point one past the last valid row (especially for
     // Parquet where offsets are row indices). Try reading from there first;
@@ -60,7 +60,7 @@ inline int findEof(const char* path, int timeframe=1, int strideIncrement=2) {
         lastTick = md.nextTick();
     }
     if (!lastTick) return 0;
-    long long endSec = mdDetail::tsToEpochSeconds(lastTick->timestamp);
+    long long endSec = mdDetail::tsToEpochSeconds(lastTick->tsRecv);
 
     return static_cast<int>((endSec - startSec) / timeframe);
 }

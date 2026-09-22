@@ -37,7 +37,7 @@ int main() {
             // mark the open trade to this bar and stamp the equity curve. the
             // timestamp matters, without it trades close at epoch 0 and anything
             // time bucketed downstream collapses into one bucket
-            handler.tick(handler.windowTimestamps[b]);
+            handler.tick(window.tsRecv[b]);
 
             // buy the first bar, then just sit in it until closeAll below
             if (!handler.inLong) handler.openLong(bar);

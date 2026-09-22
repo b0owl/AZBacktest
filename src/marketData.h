@@ -37,9 +37,10 @@
 /// volume. for nextTick, `size` is that tick's traded size; for nextClose,
 /// it's the summed volume across every tick in the bar
 ///
-/// `timestamp`, `price` and `side` always describe a single row (the tick
-/// itself, or the bar's closing tick for nextClose). `size` and the three
-/// volume splits are aggregates over the whole bar when it came from nextClose.
+/// `tsRecv`, `tsEvent`, `price` and `side` always describe a single row (the
+/// tick itself, or the bar's closing tick for nextClose). `size` and the
+/// three volume splits are aggregates over the whole bar when it came from
+/// nextClose.
 ///
 /// executedBuys/executedSells split `size` by aggressor: buy-side volume is a
 /// buyer lifting the ask, sell-side volume is a seller hitting the bid. Rows
@@ -56,8 +57,14 @@
 /// bidPriceCol/askPriceCol. Same snapshot rules as the resting sizes: never
 /// aggregated, nextClose reports the closing row's quote, and both stay 0 when
 /// the columns aren't configured.
+///
+/// tsEvent/rowNumber are read from tsEventCol/rowNumberCol, both optional
+/// (-1 disables). Same snapshot rules again: tsEvent stays an empty
+/// string_view and rowNumber stays 0 when their column isn't configured,
+/// and nextClose reports the closing row's value for both.
 struct Tick {
-    std::string_view timestamp;
+    std::string_view tsRecv;   // ts_recv: what nextClose windows bars by
+    std::string_view tsEvent;  // ts_event, empty when tsEventCol is -1
     std::string_view price;
     double size = 0.0;
     const char* side = kCSVMapping.unknownSideAggressorAlias;
@@ -68,6 +75,7 @@ struct Tick {
     double restingAsks    = 0.0;
     double bidPrice       = 0.0;
     double askPrice       = 0.0;
+    long long rowNumber   = 0; // from rowNumberCol, 0 when not configured
 };
 
 namespace mdDetail {
@@ -298,6 +306,12 @@ inline void parseOptionalFloat(std::string_view v, double& dst) {
     std::from_chars(v.data(), v.data() + v.size(), dst);
 }
 
+/// @brief long long counterpart of parseOptionalFloat, used for rowNumber
+inline void parseOptionalLongLong(std::string_view v, long long& dst) {
+    if (v.empty()) return;
+    std::from_chars(v.data(), v.data() + v.size(), dst);
+}
+
 } // namespace mdDetail
 
 // Parquet-backed reader (_ParquetMarketData), compiled in only when build.sh
@@ -417,16 +431,18 @@ public:
         _cur = (eol < _end) ? eol + 1 : _end;
         Tick t;
         // one pass over the row for every mapped column, the optional ones
-        // (aggressor, resting sizes, bid/ask prices) come back empty when their index is -1
-        const int cols[8] = { kCSVMapping.timestampCol, kCSVMapping.priceCol,
-                              kCSVMapping.aggressor,    kCSVMapping.sizeCol,
-                              kCSVMapping.restingBidCol, kCSVMapping.restingAskCol,
-                              kCSVMapping.bidPriceCol,   kCSVMapping.askPriceCol };
-        std::string_view f[8];
-        mdDetail::nFields(line, eol, cols, 8, f);
+        // (aggressor, resting sizes, bid/ask prices, ts_event, row number)
+        // come back empty when their index is -1
+        const int cols[10] = { kCSVMapping.tsRecvCol,     kCSVMapping.priceCol,
+                               kCSVMapping.aggressor,     kCSVMapping.sizeCol,
+                               kCSVMapping.restingBidCol, kCSVMapping.restingAskCol,
+                               kCSVMapping.bidPriceCol,   kCSVMapping.askPriceCol,
+                               kCSVMapping.tsEventCol,    kCSVMapping.rowNumberCol };
+        std::string_view f[10];
+        mdDetail::nFields(line, eol, cols, 10, f);
 
-        t.timestamp = f[0];
-        t.price     = f[1];
+        t.tsRecv = f[0];
+        t.price  = f[1];
         std::string_view sideView = f[2];
         std::string_view szView   = f[3];
         std::from_chars(szView.data(), szView.data() + szView.size(), t.size);
@@ -434,6 +450,8 @@ public:
         mdDetail::parseOptionalFloat(f[5], t.restingAsks);
         mdDetail::parseOptionalFloat(f[6], t.bidPrice);
         mdDetail::parseOptionalFloat(f[7], t.askPrice);
+        t.tsEvent = f[8];
+        mdDetail::parseOptionalLongLong(f[9], t.rowNumber);
         if (kCSVMapping.aggressor >= 0 && sideView == kCSVMapping.buySideAggressorAlias) {
             t.side = kCSVMapping.buySideAggressorAlias;
             t.executedBuys = t.size;
@@ -461,7 +479,7 @@ public:
         const char* eol = mdDetail::findEOL(line, _end);
         _cur = (eol < _end) ? eol + 1 : _end;
 
-        std::string_view firstTs = mdDetail::field(line, eol, kCSVMapping.timestampCol);
+        std::string_view firstTs = mdDetail::field(line, eol, kCSVMapping.tsRecvCol);
         std::string targetOwned  = mdDetail::endTimestamp(firstTs, seconds);
         std::string_view target(targetOwned);
 
@@ -501,14 +519,14 @@ public:
 
             lastLine = nline;
             lastEol  = neol;
-            lastTs   = mdDetail::field(nline, neol, kCSVMapping.timestampCol);
+            lastTs   = mdDetail::field(nline, neol, kCSVMapping.tsRecvCol);
             accumulate(nline, neol);
         }
 
         Tick t;
-        t.timestamp = lastTs;
-        t.price     = mdDetail::field(lastLine, lastEol, kCSVMapping.priceCol);
-        t.size      = barVolume;
+        t.tsRecv = lastTs;
+        t.price  = mdDetail::field(lastLine, lastEol, kCSVMapping.priceCol);
+        t.size   = barVolume;
         // rowSide is left pointing at the last row accumulate() saw, i.e. the close
         if (rowSide) t.side = rowSide;
         t.executedBuys  = buys;
@@ -528,6 +546,11 @@ public:
         if (kCSVMapping.askPriceCol >= 0)
             mdDetail::parseOptionalFloat(
                 mdDetail::field(lastLine, lastEol, kCSVMapping.askPriceCol), t.askPrice);
+        if (kCSVMapping.tsEventCol >= 0)
+            t.tsEvent = mdDetail::field(lastLine, lastEol, kCSVMapping.tsEventCol);
+        if (kCSVMapping.rowNumberCol >= 0)
+            mdDetail::parseOptionalLongLong(
+                mdDetail::field(lastLine, lastEol, kCSVMapping.rowNumberCol), t.rowNumber);
         return t;
     }
 

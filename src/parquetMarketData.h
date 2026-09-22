@@ -62,7 +62,10 @@ private:
     int _tsPos = -1, _pxPos = -1, _szPos = -1, _symPos = -1, _aggPos = -1; // position within _neededCols
     int _bidPos = -1, _askPos = -1;        // resting bid/ask size, -1 when not configured
     int _bidPxPos = -1, _askPxPos = -1;    // best bid/ask price, -1 when not configured
-    long long _tsUnitMul = 1;              // multiplier from the timestamp column's unit to nanoseconds
+    int _tsEventPos = -1;                  // ts_event, -1 when tsEventCol isn't configured
+    int _rowNumPos = -1;                   // row/sequence number, -1 when rowNumberCol isn't configured
+    long long _tsUnitMul = 1;              // multiplier from tsRecvCol's unit to nanoseconds
+    long long _tsEventUnitMul = 1;         // multiplier from tsEventCol's unit to nanoseconds
 
     int _curGroup = -1;
     std::shared_ptr<arrow::Table> _table;  // keeps the current row group's arrays alive
@@ -75,6 +78,8 @@ private:
     std::shared_ptr<arrow::Int64Array> _askArr;
     std::shared_ptr<arrow::DoubleArray> _bidPxArr;
     std::shared_ptr<arrow::DoubleArray> _askPxArr;
+    std::shared_ptr<arrow::TimestampArray> _tsEventArr;
+    std::shared_ptr<arrow::Int64Array> _rowNumArr;
     bool _symLarge = false, _aggLarge = false;
     int64_t _rowInGroup = 0;
 
@@ -86,6 +91,7 @@ private:
     static constexpr int _rollThreshold = 200;
 
     char _tsBuf[40];
+    char _tsEventBuf[40];
     char _pxBuf[32];
 
     void loadRowGroup(int g) {
@@ -112,6 +118,10 @@ private:
             ? std::static_pointer_cast<arrow::DoubleArray>(_table->column(_bidPxPos)->chunk(0)) : nullptr;
         _askPxArr = _askPxPos >= 0
             ? std::static_pointer_cast<arrow::DoubleArray>(_table->column(_askPxPos)->chunk(0)) : nullptr;
+        _tsEventArr = _tsEventPos >= 0
+            ? std::static_pointer_cast<arrow::TimestampArray>(_table->column(_tsEventPos)->chunk(0)) : nullptr;
+        _rowNumArr = _rowNumPos >= 0
+            ? std::static_pointer_cast<arrow::Int64Array>(_table->column(_rowNumPos)->chunk(0)) : nullptr;
     }
 
     void ensureRowLoaded(int64_t rowIdx) {
@@ -142,6 +152,9 @@ private:
     double curBidPrice()   const { return _bidPxArr ? _bidPxArr->Value(_rowInGroup) : 0.0; }
     double curAskPrice()   const { return _askPxArr ? _askPxArr->Value(_rowInGroup) : 0.0; }
     long long curTsNanos() const { return static_cast<long long>(_tsArr->Value(_rowInGroup)) * _tsUnitMul; }
+    bool curHasTsEvent()   const { return _tsEventArr != nullptr; }
+    long long curTsEventNanos() const { return static_cast<long long>(_tsEventArr->Value(_rowInGroup)) * _tsEventUnitMul; }
+    long long curRowNumber() const { return _rowNumArr ? _rowNumArr->Value(_rowInGroup) : 0; }
 
     // advance past rows that don't match the configured symbol filter, mirrors
     // _MarketData::_nextMatchingLine but over Parquet rows; leaves _absoluteRow
@@ -202,9 +215,9 @@ public:
             return schema->field(col);
         };
 
-        auto tsField = requireField(kCSVMapping.timestampCol, "timestamp");
+        auto tsField = requireField(kCSVMapping.tsRecvCol, "tsRecv");
         if (tsField->type()->id() != arrow::Type::TIMESTAMP)
-            throw std::runtime_error("ParquetMarketData: timestampCol is not a timestamp column in " + path
+            throw std::runtime_error("ParquetMarketData: tsRecvCol is not a timestamp column in " + path
                 + " (got " + tsField->type()->ToString() + ")");
         _tsUnitMul = mdDetail::tsUnitToNanoMultiplier(
             std::static_pointer_cast<arrow::TimestampType>(tsField->type())->unit());
@@ -258,13 +271,27 @@ public:
         requireDouble(kCSVMapping.bidPriceCol, "bidPriceCol");
         requireDouble(kCSVMapping.askPriceCol, "askPriceCol");
 
-        std::vector<int> cols = { kCSVMapping.timestampCol, kCSVMapping.priceCol, kCSVMapping.sizeCol };
+        // ts_event is a second timestamp column, same type requirement as tsRecvCol
+        if (kCSVMapping.tsEventCol >= 0) {
+            auto tsEventField = requireField(kCSVMapping.tsEventCol, "tsEventCol");
+            if (tsEventField->type()->id() != arrow::Type::TIMESTAMP)
+                throw std::runtime_error("ParquetMarketData: tsEventCol is not a timestamp column in " + path
+                    + " (got " + tsEventField->type()->ToString() + ")");
+            _tsEventUnitMul = mdDetail::tsUnitToNanoMultiplier(
+                std::static_pointer_cast<arrow::TimestampType>(tsEventField->type())->unit());
+        }
+        // row/sequence number is a plain count, same int64 requirement as the resting sizes
+        requireInt64(kCSVMapping.rowNumberCol, "rowNumberCol");
+
+        std::vector<int> cols = { kCSVMapping.tsRecvCol, kCSVMapping.priceCol, kCSVMapping.sizeCol };
         if (kCSVMapping.symbolCol >= 0) cols.push_back(kCSVMapping.symbolCol);
         if (kCSVMapping.aggressor >= 0) cols.push_back(kCSVMapping.aggressor);
         if (kCSVMapping.restingBidCol >= 0) cols.push_back(kCSVMapping.restingBidCol);
         if (kCSVMapping.restingAskCol >= 0) cols.push_back(kCSVMapping.restingAskCol);
         if (kCSVMapping.bidPriceCol >= 0) cols.push_back(kCSVMapping.bidPriceCol);
         if (kCSVMapping.askPriceCol >= 0) cols.push_back(kCSVMapping.askPriceCol);
+        if (kCSVMapping.tsEventCol >= 0) cols.push_back(kCSVMapping.tsEventCol);
+        if (kCSVMapping.rowNumberCol >= 0) cols.push_back(kCSVMapping.rowNumberCol);
         std::sort(cols.begin(), cols.end());
         cols.erase(std::unique(cols.begin(), cols.end()), cols.end());
         _neededCols = cols;
@@ -272,7 +299,7 @@ public:
         auto posOf = [&](int col) {
             return static_cast<int>(std::lower_bound(_neededCols.begin(), _neededCols.end(), col) - _neededCols.begin());
         };
-        _tsPos  = posOf(kCSVMapping.timestampCol);
+        _tsPos  = posOf(kCSVMapping.tsRecvCol);
         _pxPos  = posOf(kCSVMapping.priceCol);
         _szPos  = posOf(kCSVMapping.sizeCol);
         _symPos = kCSVMapping.symbolCol >= 0 ? posOf(kCSVMapping.symbolCol) : -1;
@@ -281,6 +308,8 @@ public:
         _askPos = kCSVMapping.restingAskCol >= 0 ? posOf(kCSVMapping.restingAskCol) : -1;
         _bidPxPos = kCSVMapping.bidPriceCol >= 0 ? posOf(kCSVMapping.bidPriceCol) : -1;
         _askPxPos = kCSVMapping.askPriceCol >= 0 ? posOf(kCSVMapping.askPriceCol) : -1;
+        _tsEventPos = kCSVMapping.tsEventCol >= 0 ? posOf(kCSVMapping.tsEventCol) : -1;
+        _rowNumPos  = kCSVMapping.rowNumberCol >= 0 ? posOf(kCSVMapping.rowNumberCol) : -1;
 
         int numRowGroups = _reader->parquet_reader()->metadata()->num_row_groups();
         _rowGroupOffsets.assign(static_cast<std::size_t>(numRowGroups) + 1, 0);
@@ -324,7 +353,13 @@ public:
 
         Tick t;
         int n = mdDetail::formatIsoTimestamp(_tsBuf, sizeof(_tsBuf), curTsNanos());
-        t.timestamp = std::string_view(_tsBuf, static_cast<std::size_t>(n));
+        t.tsRecv = std::string_view(_tsBuf, static_cast<std::size_t>(n));
+
+        if (curHasTsEvent()) {
+            int en = mdDetail::formatIsoTimestamp(_tsEventBuf, sizeof(_tsEventBuf), curTsEventNanos());
+            t.tsEvent = std::string_view(_tsEventBuf, static_cast<std::size_t>(en));
+        }
+        t.rowNumber = curRowNumber();
 
         auto [ptr, ec] = std::to_chars(_pxBuf, _pxBuf + sizeof(_pxBuf), curPrice());
         t.price = std::string_view(_pxBuf, static_cast<std::size_t>(ptr - _pxBuf));
@@ -350,8 +385,8 @@ public:
     }
 
     /// @brief bar close over `seconds`, volume summed and split per aggressor
-    /// side, mirrors _MarketData::nextClose. t.side, the resting sizes and the
-    /// bid/ask prices are the closing row's
+    /// side, mirrors _MarketData::nextClose. t.side, the resting sizes, the
+    /// bid/ask prices, ts_event and row number are all the closing row's
     std::optional<Tick> nextClose(int seconds) {
         if (!advanceToNextMatch()) return std::nullopt;
 
@@ -386,6 +421,13 @@ public:
         double lastBid = curRestingBid(), lastAsk = curRestingAsk();
         double lastBidPx = curBidPrice(), lastAskPx = curAskPrice();
         std::string lastTs = firstTs;
+        // ts_event/row number are snapshots too, same closing-row rule
+        bool hasTsEvent = curHasTsEvent();
+        std::string lastTsEvent = hasTsEvent
+            ? std::string(_tsEventBuf, static_cast<std::size_t>(
+                  mdDetail::formatIsoTimestamp(_tsEventBuf, sizeof(_tsEventBuf), curTsEventNanos())))
+            : std::string();
+        long long lastRowNum = curRowNumber();
         accumulate();
         ++_absoluteRow;
 
@@ -398,13 +440,23 @@ public:
             lastAsk = curRestingAsk();
             lastBidPx = curBidPrice();
             lastAskPx = curAskPrice();
+            if (hasTsEvent) {
+                int elen = mdDetail::formatIsoTimestamp(_tsEventBuf, sizeof(_tsEventBuf), curTsEventNanos());
+                lastTsEvent.assign(_tsEventBuf, static_cast<std::size_t>(elen));
+            }
+            lastRowNum = curRowNumber();
             accumulate();
             ++_absoluteRow;
         }
 
         Tick t;
         std::memcpy(_tsBuf, lastTs.data(), lastTs.size());
-        t.timestamp = std::string_view(_tsBuf, lastTs.size());
+        t.tsRecv = std::string_view(_tsBuf, lastTs.size());
+        if (hasTsEvent) {
+            std::memcpy(_tsEventBuf, lastTsEvent.data(), lastTsEvent.size());
+            t.tsEvent = std::string_view(_tsEventBuf, lastTsEvent.size());
+        }
+        t.rowNumber = lastRowNum;
         auto [ptr, ec] = std::to_chars(_pxBuf, _pxBuf + sizeof(_pxBuf), lastPx);
         t.price = std::string_view(_pxBuf, static_cast<std::size_t>(ptr - _pxBuf));
         t.size = barVolume;

@@ -63,6 +63,10 @@ enum class TradeDirection { Long, Short };
 /// bidPrices/askPrices are the best quote at each row, same snapshot rules (the
 /// closing tick's quote at timeframe>0), and stay 0 when bidPriceCol/askPriceCol
 /// aren't mapped
+/// tsRecv/tsEvent are epoch-seconds timestamps (ts_recv is what nextClose windows
+/// bars by; ts_event stays 0 when tsEventCol isn't mapped), and rowNumbers is
+/// each row's rowNumberCol value (0 when unmapped) - all closing-row snapshots
+/// at timeframe>0, same rule as the resting/bid-ask columns
 /// every vector here is the same length and indexed the same way, so
 /// executedBuys[i] always belongs to prices[i]
 struct DataWindow {
@@ -75,6 +79,9 @@ struct DataWindow {
     std::vector<double> restingAsks;   // volume resting on the ask
     std::vector<double> bidPrices;     // best bid price
     std::vector<double> askPrices;     // best ask price
+    std::vector<long long> tsRecv;     // ts_recv, epoch seconds
+    std::vector<long long> tsEvent;    // ts_event, epoch seconds, 0 when tsEventCol is -1
+    std::vector<long long> rowNumbers; // from rowNumberCol, 0 when not configured
 };
 
 class Trade {
@@ -157,9 +164,6 @@ public:
 
     bool canOverlap = false; // can multiple trades be held at once
 
-    // timestamps from the last requestDataWindow call, parallel to the returned prices
-    std::vector<long long> windowTimestamps;
-
     long long lastEpochSec = 0; // most recent timestamp fed to tick(); stamped onto trades at close
 
     /// @brief open a long at the current price, returns 1 if it opened, 0 if
@@ -228,8 +232,9 @@ public:
     /// @brief pull `period` bars from the market data source, if timeframe is 0
     /// it reads raw ticks; otherwise it reads closes at that many seconds per bar.
     /// returns parallel prices + volumes + executedBuys/executedSells + deltas
-    /// + restingBids/restingAsks + bidPrices/askPrices, callers usually std::move prices into their
-    /// `Handling`-bound vector and feed volumes into returnVolumeProfile
+    /// + restingBids/restingAsks + bidPrices/askPrices + tsRecv/tsEvent/rowNumbers,
+    /// callers usually std::move prices into their `Handling`-bound vector and
+    /// feed volumes into returnVolumeProfile
     /// @param md       the MarketData source to read from
     /// @param period   how many rows/bars to load
     /// @param timeframe 0 = tick-by-tick, >0 = close every N seconds
@@ -246,8 +251,9 @@ public:
         out.restingAsks.reserve(period);
         out.bidPrices.reserve(period);
         out.askPrices.reserve(period);
-        windowTimestamps.clear();
-        windowTimestamps.reserve(period);
+        out.tsRecv.reserve(period);
+        out.tsEvent.reserve(period);
+        out.rowNumbers.reserve(period);
 
         if (timeframe==0) {
             for (int i=0; i<period; i++) {
@@ -262,7 +268,9 @@ public:
                 out.prices.push_back(px);
                 out.deltas.push_back(tick->executedBuys - tick->executedSells);
                 out.volumes.push_back(tick->size);
-                windowTimestamps.push_back(mdDetail::tsToEpochSeconds(tick->timestamp));
+                out.tsRecv.push_back(mdDetail::tsToEpochSeconds(tick->tsRecv));
+                out.tsEvent.push_back(tick->tsEvent.empty() ? 0 : mdDetail::tsToEpochSeconds(tick->tsEvent));
+                out.rowNumbers.push_back(tick->rowNumber);
 
                 // aggressor split, pushed unconditionally so these stay index-parallel
                 // with prices/volumes (a tick with no usable side contributes 0 to both)
@@ -289,7 +297,9 @@ public:
                 out.prices.push_back(px);
                 out.deltas.push_back(bar->executedBuys - bar->executedSells);
                 out.volumes.push_back(bar->size);
-                windowTimestamps.push_back(mdDetail::tsToEpochSeconds(bar->timestamp));
+                out.tsRecv.push_back(mdDetail::tsToEpochSeconds(bar->tsRecv));
+                out.tsEvent.push_back(bar->tsEvent.empty() ? 0 : mdDetail::tsToEpochSeconds(bar->tsEvent));
+                out.rowNumbers.push_back(bar->rowNumber);
 
                 // per-bar aggressor split, summed across every tick in the bar
                 out.executedBuys.push_back(bar->executedBuys);

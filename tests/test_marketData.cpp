@@ -162,7 +162,7 @@ TEST(nextTickParsesPriceSizeAndTimestamp) {
 
     auto t = md.nextTick();
     REQUIRE(t.has_value());
-    CHECK_EQ(t->timestamp, "2025-06-01T22:00:00.000000000Z");
+    CHECK_EQ(t->tsRecv, "2025-06-01T22:00:00.000000000Z");
     CHECK_EQ(t->price, "5000.25");
     CHECK_F(t->size, 3.0);
 }
@@ -353,7 +353,7 @@ TEST(nextCloseReportsClosingRowPrice) {
     auto bar1 = md.nextClose(60);
     REQUIRE(bar1.has_value());
     CHECK_EQ(bar1->price, "5001.00");
-    CHECK_EQ(bar1->timestamp, "2025-06-01T22:01:05.000000000Z");
+    CHECK_EQ(bar1->tsRecv, "2025-06-01T22:01:05.000000000Z");
 
     auto bar2 = md.nextClose(60);
     REQUIRE(bar2.has_value());

@@ -70,11 +70,19 @@ Note: If you use the header file (from releases) you'd have to search for the ma
 path = "C:/path/to/your/data.csv"
 
 # column indices (0-indexed)
-timestampCol = 0
-priceCol     = 8
-sizeCol      = 9
+# tsRecvCol is the timestamp used for bar windowing/sorting - if your data
+# doesn't distinguish recv/event time, just point it at whatever column
+# carries the timestamp
+tsRecvCol = 0
+priceCol  = 8
+sizeCol   = 9
 
 skipHeader = true
+
+# event timestamp + row/sequence number columns, set either to -1 to disable
+# on Databento TBBO these are ts_event and sequence
+tsEventCol   = -1
+rowNumberCol = -1
 
 # symbol filtering (set symbolCol to -1 to disable)
 symbolCol  = -1

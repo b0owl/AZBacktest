@@ -50,7 +50,7 @@ int main() {
             // mark the open trade to this bar and stamp the equity curve. the
             // timestamp matters, without it trades close at epoch 0 and anything
             // time bucketed downstream collapses into one bucket
-            handler.tick(handler.windowTimestamps[b]);
+            handler.tick(window.tsRecv[b]);
 
             // risk first, so a runner gets cut before any signal work
             if (handler.openTrade) {

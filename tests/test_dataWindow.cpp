@@ -22,6 +22,9 @@ static void checkParallelLengths(const DataWindow& w) {
     CHECK_EQ(w.restingAsks.size(),   n);
     CHECK_EQ(w.bidPrices.size(),     n);
     CHECK_EQ(w.askPrices.size(),     n);
+    CHECK_EQ(w.tsRecv.size(),       n);
+    CHECK_EQ(w.tsEvent.size(),      n);
+    CHECK_EQ(w.rowNumbers.size(),   n);
 }
 
 // ---------------------------------------------------------------- tick mode
@@ -174,7 +177,7 @@ TEST(deltasAreOrderflowDelta) {
 }
 
 // orderflow delta is self-contained per tick, so batching doesn't matter
-// — each tick's delta is just its own executedBuys - executedSells
+// ï¿½ each tick's delta is just its own executedBuys - executedSells
 TEST(deltasAreConsistentAcrossBatches) {
     useFixtureMapping();
     TempCsv csv(azt::basicTicks());
@@ -206,7 +209,7 @@ TEST(periodLongerThanFileStopsAtEof) {
     checkParallelLengths(w);
 }
 
-TEST(windowTimestampsAreParallelToPrices) {
+TEST(tsRecvIsParallelToPrices) {
     useFixtureMapping();
     TempCsv csv(azt::basicTicks());
     MarketData md(csv.path());
@@ -215,10 +218,29 @@ TEST(windowTimestampsAreParallelToPrices) {
     Handling h(prices, 0.25, 12.5, false);
     auto w = h.requestDataWindow(md, 10);
 
-    CHECK_EQ(h.windowTimestamps.size(), w.prices.size());
+    CHECK_EQ(w.tsRecv.size(), w.prices.size());
     long long base = mdDetail::civilToDays(2025, 6, 1) * 86400LL + 22 * 3600LL;
-    CHECK_EQ(h.windowTimestamps[0], base);
-    CHECK_EQ(h.windowTimestamps[1], base + 10);
+    CHECK_EQ(w.tsRecv[0], base);
+    CHECK_EQ(w.tsRecv[1], base + 10);
+}
+
+// tsEvent/rowNumbers stay index-parallel and default to 0 when tsEventCol/
+// rowNumberCol aren't mapped, same "always pushed" guarantee as the resting
+// vectors
+TEST(tsEventAndRowNumberStayParallelWhenUnmapped) {
+    useFixtureMapping();
+    TempCsv csv(azt::basicTicks());
+    MarketData md(csv.path());
+
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
+    auto w = h.requestDataWindow(md, 10);
+
+    checkParallelLengths(w);
+    for (std::size_t i = 0; i < w.tsEvent.size(); i++) {
+        CHECK_EQ(w.tsEvent[i], 0LL);
+        CHECK_EQ(w.rowNumbers[i], 0LL);
+    }
 }
 
 // tickRes reads and discards ticks between the ones it keeps, so the discarded
@@ -273,6 +295,27 @@ TEST(whenUnknownNeverFiresWhenEverySideClassifies) {
     h.requestDataWindow(md, 10, 0, [](){ unknownHits++; });
 
     CHECK_EQ(unknownHits, 0);
+}
+
+// mapping tsEventCol/rowNumberCol pulls real values through, mirroring how
+// restingBidCol/bidPriceCol etc are exercised above
+TEST(tsEventAndRowNumberAreParsedWhenMapped) {
+    useFixtureMapping();
+    kCSVMapping.tsEventCol   = 0; // same column as tsRecvCol, just to prove the plumbing
+    kCSVMapping.rowNumberCol = 3; // reuse the size column, values are known ints
+    TempCsv csv(azt::basicTicks());
+    MarketData md(csv.path());
+
+    std::vector<double> prices;
+    Handling h(prices, 0.25, 12.5, false);
+    auto w = h.requestDataWindow(md, 10);
+    REQUIRE(w.tsEvent.size() == 6);
+
+    const long long wantRow[6] = {3, 7, 2, 5, 4, 6};
+    for (int i = 0; i < 6; i++) {
+        CHECK_EQ(w.tsEvent[i], w.tsRecv[i]);
+        CHECK_EQ(w.rowNumbers[i], wantRow[i]);
+    }
 }
 
 // ---------------------------------------------------------------- bar mode

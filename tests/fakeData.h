@@ -61,10 +61,13 @@ inline constexpr const char* kFixtureHeader = "ts,symbol,price,size,side,bidsz,a
 inline void useFixtureMapping() {
     cfgDetail::loaded = true; // keep loadConfig from ever touching config.toml
 
-    kCSVMapping.timestampCol = 0;
-    kCSVMapping.priceCol     = 2;
-    kCSVMapping.sizeCol      = 3;
-    kCSVMapping.skipHeader   = true;
+    kCSVMapping.tsRecvCol  = 0;
+    kCSVMapping.priceCol   = 2;
+    kCSVMapping.sizeCol    = 3;
+    kCSVMapping.skipHeader = true;
+
+    kCSVMapping.tsEventCol   = -1;
+    kCSVMapping.rowNumberCol = -1;
 
     kCSVMapping.dateFormat = {0, 4, 5, 2, 8, 2}; // ISO-8601
 

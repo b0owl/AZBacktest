@@ -24,7 +24,9 @@ struct DateFormat {
 };
 
 struct CSVMapping {
-    int timestampCol;
+    int tsRecvCol;   // required: receive timestamp, also what nextClose windows bars by.
+                      // if your data doesn't distinguish recv/event time, just point
+                      // this at whatever column carries the timestamp
     int priceCol;
     int sizeCol;
 
@@ -36,6 +38,17 @@ struct CSVMapping {
     DateFormat dateFormat;
 
     bool skipHeader;
+
+    // event timestamp column, -1 to disable. on Databento TBBO this is ts_event
+    // (when the exchange generated the event) as opposed to tsRecvCol/ts_recv
+    // (when it was received) - purely carried through to DataWindow, doesn't
+    // affect windowing
+    int tsEventCol;
+
+    // row/sequence number column, -1 to disable. on Databento TBBO this is
+    // `sequence`, a per-instrument monotonic counter from the exchange -
+    // carried through to DataWindow.rowNumbers, doesn't affect windowing
+    int rowNumberCol;
 
     // if the CSV has multiple symbols interleaved, set these to filter to one
     int symbolCol;          // column index of the symbol field, -1 to disable
@@ -82,6 +95,7 @@ inline CSVMapping kCSVMapping{
     "",                        // path (empty until loadConfig)
     {0, 4, 5, 2, 8, 2},       // ISO-8601 defaults
     true,                      // skipHeader
+    -1, -1,                    // tsEventCol/rowNumberCol disabled
     -1, "", false,             // symbol filtering disabled
     -1, "B", "S", "N",        // aggressor disabled, default aliases
     -1, -1,                    // resting bid/ask columns disabled
@@ -99,12 +113,20 @@ R"(# AZBacktest configuration
 path = "PLACEHOLDER"
 
 # column indices (0-indexed)
-timestampCol = 0
-priceCol     = 0
-sizeCol      = 0
+# tsRecvCol is the timestamp used for bar windowing/sorting - if your data
+# doesn't distinguish recv/event time, just point it at whatever column
+# carries the timestamp
+tsRecvCol = 0
+priceCol  = 0
+sizeCol   = 0
 
 # set to true if the CSV has a header row to skip
 skipHeader = true
+
+# event timestamp + row/sequence number columns, set either to -1 to disable
+# on Databento TBBO these are ts_event and sequence
+tsEventCol   = -1
+rowNumberCol = -1
 
 # symbol filtering (set symbolCol to -1 to disable)
 symbolCol  = -1
@@ -160,9 +182,9 @@ inline void loadConfig(const char* tomlPath = "config.toml") {
 
     auto cfg = toml::parse(tomlPath);
 
-    kCSVMapping.timestampCol = toml::getInt(cfg, "", "timestampCol");
-    kCSVMapping.priceCol     = toml::getInt(cfg, "", "priceCol");
-    kCSVMapping.sizeCol      = toml::getInt(cfg, "", "sizeCol");
+    kCSVMapping.tsRecvCol = toml::getInt(cfg, "", "tsRecvCol");
+    kCSVMapping.priceCol  = toml::getInt(cfg, "", "priceCol");
+    kCSVMapping.sizeCol   = toml::getInt(cfg, "", "sizeCol");
 
     cfgDetail::pathStr = toml::getString(cfg, "", "path");
     kCSVMapping.path   = cfgDetail::pathStr.c_str();
@@ -175,6 +197,9 @@ inline void loadConfig(const char* tomlPath = "config.toml") {
     kCSVMapping.dateFormat.dayLength   = toml::getInt(cfg, "dateFormat", "dayLength", 2);
 
     kCSVMapping.skipHeader = toml::getBool(cfg, "", "skipHeader", true);
+
+    kCSVMapping.tsEventCol   = toml::getInt(cfg, "", "tsEventCol", -1);
+    kCSVMapping.rowNumberCol = toml::getInt(cfg, "", "rowNumberCol", -1);
 
     kCSVMapping.symbolCol = toml::getInt(cfg, "", "symbolCol", -1);
     cfgDetail::symbolStr  = toml::getString(cfg, "", "symbol");
