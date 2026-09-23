@@ -9,6 +9,8 @@
 
 AZBacktest is a C++17 backtesting framework for algorithmic trading strategies on tick data. Header-only API (also available as a single-header amalgamation), CSV and Parquet data support (Databento-style formats work out of the box), and an ImGui/ImPlot visualization window.
 
+Note: Release files are frequently out of date. Clone and build the project if its missing a feature you require.  
+
 ## Build
 
 ```bash
