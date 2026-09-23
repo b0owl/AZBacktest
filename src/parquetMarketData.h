@@ -64,6 +64,7 @@ private:
     int _bidPxPos = -1, _askPxPos = -1;    // best bid/ask price, -1 when not configured
     int _tsEventPos = -1;                  // ts_event, -1 when tsEventCol isn't configured
     int _rowNumPos = -1;                   // row/sequence number, -1 when rowNumberCol isn't configured
+    int _actionPos = -1;                   // action classification, -1 when not configured
     long long _tsUnitMul = 1;              // multiplier from tsRecvCol's unit to nanoseconds
     long long _tsEventUnitMul = 1;         // multiplier from tsEventCol's unit to nanoseconds
 
@@ -80,7 +81,8 @@ private:
     std::shared_ptr<arrow::DoubleArray> _askPxArr;
     std::shared_ptr<arrow::TimestampArray> _tsEventArr;
     std::shared_ptr<arrow::Int64Array> _rowNumArr;
-    bool _symLarge = false, _aggLarge = false;
+    std::shared_ptr<arrow::Array> _actionArr;
+    bool _symLarge = false, _aggLarge = false, _actionLarge = false;
     int64_t _rowInGroup = 0;
 
     int64_t _absoluteRow = 0; // physical row index across the whole file
@@ -122,6 +124,7 @@ private:
             ? std::static_pointer_cast<arrow::TimestampArray>(_table->column(_tsEventPos)->chunk(0)) : nullptr;
         _rowNumArr = _rowNumPos >= 0
             ? std::static_pointer_cast<arrow::Int64Array>(_table->column(_rowNumPos)->chunk(0)) : nullptr;
+        _actionArr = _actionPos >= 0 ? _table->column(_actionPos)->chunk(0) : nullptr;
     }
 
     void ensureRowLoaded(int64_t rowIdx) {
@@ -143,6 +146,10 @@ private:
     std::string_view curSide() const {
         return _aggLarge ? std::static_pointer_cast<arrow::LargeStringArray>(_aggArr)->GetView(_rowInGroup)
                          : std::static_pointer_cast<arrow::StringArray>(_aggArr)->GetView(_rowInGroup);
+    }
+    std::string_view curAction() const {
+        return _actionLarge ? std::static_pointer_cast<arrow::LargeStringArray>(_actionArr)->GetView(_rowInGroup)
+                            : std::static_pointer_cast<arrow::StringArray>(_actionArr)->GetView(_rowInGroup);
     }
     double  curPrice()   const { return _pxArr->Value(_rowInGroup); }
     int64_t curSizeRaw() const { return _szArr->Value(_rowInGroup); }
@@ -248,6 +255,14 @@ public:
                     + " (got " + aggField->type()->ToString() + ")");
             _aggLarge = (aid == arrow::Type::LARGE_STRING);
         }
+        if (kCSVMapping.actionCol >= 0) {
+            auto actionField = requireField(kCSVMapping.actionCol, "actionCol");
+            auto aid = actionField->type()->id();
+            if (aid != arrow::Type::STRING && aid != arrow::Type::LARGE_STRING)
+                throw std::runtime_error("ParquetMarketData: actionCol must be a string column in " + path
+                    + " (got " + actionField->type()->ToString() + ")");
+            _actionLarge = (aid == arrow::Type::LARGE_STRING);
+        }
 
         // resting sizes get the same int64 requirement as sizeCol, they're counts
         auto requireInt64 = [&](int col, const char* role) {
@@ -292,6 +307,7 @@ public:
         if (kCSVMapping.askPriceCol >= 0) cols.push_back(kCSVMapping.askPriceCol);
         if (kCSVMapping.tsEventCol >= 0) cols.push_back(kCSVMapping.tsEventCol);
         if (kCSVMapping.rowNumberCol >= 0) cols.push_back(kCSVMapping.rowNumberCol);
+        if (kCSVMapping.actionCol >= 0) cols.push_back(kCSVMapping.actionCol);
         std::sort(cols.begin(), cols.end());
         cols.erase(std::unique(cols.begin(), cols.end()), cols.end());
         _neededCols = cols;
@@ -310,6 +326,7 @@ public:
         _askPxPos = kCSVMapping.askPriceCol >= 0 ? posOf(kCSVMapping.askPriceCol) : -1;
         _tsEventPos = kCSVMapping.tsEventCol >= 0 ? posOf(kCSVMapping.tsEventCol) : -1;
         _rowNumPos  = kCSVMapping.rowNumberCol >= 0 ? posOf(kCSVMapping.rowNumberCol) : -1;
+        _actionPos  = kCSVMapping.actionCol >= 0 ? posOf(kCSVMapping.actionCol) : -1;
 
         int numRowGroups = _reader->parquet_reader()->metadata()->num_row_groups();
         _rowGroupOffsets.assign(static_cast<std::size_t>(numRowGroups) + 1, 0);
@@ -380,13 +397,15 @@ public:
         t.bidPrice    = curBidPrice();
         t.askPrice    = curAskPrice();
 
+        if (_actionPos >= 0) t.action = mdDetail::classifyAction(curAction());
+
         ++_absoluteRow;
         return t;
     }
 
     /// @brief bar close over `seconds`, volume summed and split per aggressor
     /// side, mirrors _MarketData::nextClose. t.side, the resting sizes, the
-    /// bid/ask prices, ts_event and row number are all the closing row's
+    /// bid/ask prices, ts_event, row number and action are all the closing row's
     std::optional<Tick> nextClose(int seconds) {
         if (!advanceToNextMatch()) return std::nullopt;
 
@@ -428,6 +447,9 @@ public:
                   mdDetail::formatIsoTimestamp(_tsEventBuf, sizeof(_tsEventBuf), curTsEventNanos())))
             : std::string();
         long long lastRowNum = curRowNumber();
+        // action is a book-event classification, snapshot from the closing row
+        // like the resting sizes/bid-ask prices above, not summed across the bar
+        const char* lastAction = _actionPos >= 0 ? mdDetail::classifyAction(curAction()) : kCSVMapping.actionNoneAlias;
         accumulate();
         ++_absoluteRow;
 
@@ -445,6 +467,7 @@ public:
                 lastTsEvent.assign(_tsEventBuf, static_cast<std::size_t>(elen));
             }
             lastRowNum = curRowNumber();
+            if (_actionPos >= 0) lastAction = mdDetail::classifyAction(curAction());
             accumulate();
             ++_absoluteRow;
         }
@@ -469,6 +492,7 @@ public:
         t.restingAsks   = lastAsk;
         t.bidPrice      = lastBidPx;
         t.askPrice      = lastAskPx;
+        t.action        = lastAction;
         return t;
     }
 };

@@ -110,6 +110,20 @@ restingAskCol = -1
 bidPriceCol = -1
 askPriceCol = -1
 
+# book-event classification (set actionCol to -1 to disable)
+# a per-row snapshot like the resting/bid-ask columns, not summed across a bar
+# these are the literal strings in your action column - Databento's MBO/MBP
+# schemas use A/C/M/T/F/R for Add/Cancel/Modify/Trade/Fill/Clear(book reset),
+# anything else (including a disabled column) lands on actionNoneAlias
+actionCol         = -1
+actionAddAlias    = "A"
+actionCancelAlias = "C"
+actionModifyAlias = "M"
+actionTradeAlias  = "T"
+actionFillAlias   = "F"
+actionClearAlias  = "R"
+actionNoneAlias   = "N"
+
 # trading costs (all in pts)
 commission = 0.0
 spread     = 0.0
@@ -125,3 +139,6 @@ monthLength = 2
 dayOffset   = 8
 dayLength   = 2
 ```
+
+Note: I realize the vibecoded system for registering a column is overly complex, after doing it myself for `action`.   
+I will eventually write a guide and simplifiy the system. 

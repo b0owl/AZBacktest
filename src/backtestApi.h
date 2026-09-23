@@ -82,6 +82,7 @@ struct DataWindow {
     std::vector<long long> tsRecv;     // ts_recv, epoch seconds
     std::vector<long long> tsEvent;    // ts_event, epoch seconds, 0 when tsEventCol is -1
     std::vector<long long> rowNumbers; // from rowNumberCol, 0 when not configured
+    std::vector<const char*> action;
 };
 
 class Trade {
@@ -254,6 +255,7 @@ public:
         out.tsRecv.reserve(period);
         out.tsEvent.reserve(period);
         out.rowNumbers.reserve(period);
+        out.action.reserve(period);
 
         if (timeframe==0) {
             for (int i=0; i<period; i++) {
@@ -286,6 +288,9 @@ public:
                 out.bidPrices.push_back(tick->bidPrice);
                 out.askPrices.push_back(tick->askPrice);
 
+                // action
+                out.action.push_back(tick->action);
+
                 processedBars++;
             }
         } else {
@@ -311,6 +316,9 @@ public:
                 out.restingAsks.push_back(bar->restingAsks);
                 out.bidPrices.push_back(bar->bidPrice);
                 out.askPrices.push_back(bar->askPrice);
+
+                // action
+                out.action.push_back(bar->action);
 
                 processedBars++;
             }

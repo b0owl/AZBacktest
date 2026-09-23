@@ -48,10 +48,11 @@ public:
 //   col 6  asksz   resting ask size
 //   col 7  bidpx   best bid price
 //   col 8  askpx   best ask price
+//   col 9  action  A/C/M/T/F/R = Add/Cancel/Modify/Trade/Fill/Clear, anything else None
 //
 // Note the header row: _MarketData::_skipHeaderOnce() always drops the first
 // line regardless of the skipHeader config flag, so every fixture needs one.
-inline constexpr const char* kFixtureHeader = "ts,symbol,price,size,side,bidsz,asksz,bidpx,askpx\n";
+inline constexpr const char* kFixtureHeader = "ts,symbol,price,size,side,bidsz,asksz,bidpx,askpx,action\n";
 
 /// @brief point the global kCSVMapping at the layout above. Call it at the top
 /// of any test that reads data, then tweak individual fields for what the test
@@ -86,6 +87,15 @@ inline void useFixtureMapping() {
     kCSVMapping.bidPriceCol = 7;
     kCSVMapping.askPriceCol = 8;
 
+    kCSVMapping.actionCol         = 9;
+    kCSVMapping.actionAddAlias    = "A";
+    kCSVMapping.actionCancelAlias = "C";
+    kCSVMapping.actionModifyAlias = "M";
+    kCSVMapping.actionTradeAlias  = "T";
+    kCSVMapping.actionFillAlias   = "F";
+    kCSVMapping.actionClearAlias  = "R";
+    kCSVMapping.actionNoneAlias   = "N";
+
     kCSVMapping.commision  = 0.f;
     kCSVMapping.spread     = 0.f;
     kCSVMapping.timingCost = 0.f;
@@ -94,19 +104,22 @@ inline void useFixtureMapping() {
 /// @brief six trades spanning ~2 minutes, one of them with an unclassifiable
 /// side. Laid out so that nextClose(60) produces exactly two bars:
 ///
-///   bar 1  rows 0-3  vol 17  buys 8  sells 7  unknown 2  close 5001.00  book 60/20  quote 5000.75/5001.25
-///   bar 2  rows 4-5  vol 10  buys 6  sells 4  unknown 0  close 5000.25  book 30/33  quote 5000.00/5000.50
+///   bar 1  rows 0-3  vol 17  buys 8  sells 7  unknown 2  close 5001.00  book 60/20  quote 5000.75/5001.25  action T
+///   bar 2  rows 4-5  vol 10  buys 6  sells 4  unknown 0  close 5000.25  book 30/33  quote 5000.00/5000.50  action R
 ///
 /// the resting sizes and the quote deliberately move every row, so a test can
-/// tell a close row snapshot apart from a sum or an average across the bar
+/// tell a close row snapshot apart from a sum or an average across the bar.
+/// action cycles through all six configured aliases (A/C/M/T/F/R) across the
+/// six rows, one per row, so nextTick can be checked against every alias and
+/// nextClose against the two closing rows' (T, R)
 inline std::string basicTicks() {
     return std::string(kFixtureHeader) +
-        "2025-06-01T22:00:00.000000000Z,ESM5,5000.25,3,B,40,55,5000.00,5000.50\n"
-        "2025-06-01T22:00:10.000000000Z,ESM5,5000.50,7,A,41,52,5000.25,5000.75\n"
-        "2025-06-01T22:00:30.000000000Z,ESM5,5000.75,2,X,45,50,5000.50,5001.00\n"
-        "2025-06-01T22:01:05.000000000Z,ESM5,5001.00,5,B,60,20,5000.75,5001.25\n"
-        "2025-06-01T22:01:40.000000000Z,ESM5,5000.50,4,A,61,19,5000.25,5000.75\n"
-        "2025-06-01T22:02:10.000000000Z,ESM5,5000.25,6,B,30,33,5000.00,5000.50\n";
+        "2025-06-01T22:00:00.000000000Z,ESM5,5000.25,3,B,40,55,5000.00,5000.50,A\n"
+        "2025-06-01T22:00:10.000000000Z,ESM5,5000.50,7,A,41,52,5000.25,5000.75,C\n"
+        "2025-06-01T22:00:30.000000000Z,ESM5,5000.75,2,X,45,50,5000.50,5001.00,M\n"
+        "2025-06-01T22:01:05.000000000Z,ESM5,5001.00,5,B,60,20,5000.75,5001.25,T\n"
+        "2025-06-01T22:01:40.000000000Z,ESM5,5000.50,4,A,61,19,5000.25,5000.75,F\n"
+        "2025-06-01T22:02:10.000000000Z,ESM5,5000.25,6,B,30,33,5000.00,5000.50,R\n";
 }
 
 } // namespace azt

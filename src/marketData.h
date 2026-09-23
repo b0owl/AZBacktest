@@ -76,6 +76,7 @@ struct Tick {
     double bidPrice       = 0.0;
     double askPrice       = 0.0;
     long long rowNumber   = 0; // from rowNumberCol, 0 when not configured
+    const char* action           = kCSVMapping.actionNoneAlias;
 };
 
 namespace mdDetail {
@@ -312,6 +313,20 @@ inline void parseOptionalLongLong(std::string_view v, long long& dst) {
     std::from_chars(v.data(), v.data() + v.size(), dst);
 }
 
+/// @brief classify a raw action-column value against the seven configured
+/// aliases, shared by both nextTick/nextClose (CSV and Parquet) so the chain
+/// only lives in one place. falls back to actionNoneAlias when it matches
+/// none of them, same "unknown lands on the neutral default" rule as side
+inline const char* classifyAction(std::string_view actionView) {
+    if (actionView == kCSVMapping.actionAddAlias)         return kCSVMapping.actionAddAlias;
+    if (actionView == kCSVMapping.actionCancelAlias)      return kCSVMapping.actionCancelAlias;
+    if (actionView == kCSVMapping.actionModifyAlias)      return kCSVMapping.actionModifyAlias;
+    if (actionView == kCSVMapping.actionTradeAlias)       return kCSVMapping.actionTradeAlias;
+    if (actionView == kCSVMapping.actionFillAlias)        return kCSVMapping.actionFillAlias;
+    if (actionView == kCSVMapping.actionClearAlias)       return kCSVMapping.actionClearAlias;
+    return kCSVMapping.actionNoneAlias;
+}
+
 } // namespace mdDetail
 
 // Parquet-backed reader (_ParquetMarketData), compiled in only when build.sh
@@ -433,18 +448,20 @@ public:
         // one pass over the row for every mapped column, the optional ones
         // (aggressor, resting sizes, bid/ask prices, ts_event, row number)
         // come back empty when their index is -1
-        const int cols[10] = { kCSVMapping.tsRecvCol,     kCSVMapping.priceCol,
+        const int cols[11] = { kCSVMapping.tsRecvCol,     kCSVMapping.priceCol,
                                kCSVMapping.aggressor,     kCSVMapping.sizeCol,
                                kCSVMapping.restingBidCol, kCSVMapping.restingAskCol,
                                kCSVMapping.bidPriceCol,   kCSVMapping.askPriceCol,
-                               kCSVMapping.tsEventCol,    kCSVMapping.rowNumberCol };
-        std::string_view f[10];
-        mdDetail::nFields(line, eol, cols, 10, f);
+                               kCSVMapping.tsEventCol,    kCSVMapping.rowNumberCol,
+                               kCSVMapping.actionCol };
+        std::string_view f[11];
+        mdDetail::nFields(line, eol, cols, 11, f);
 
         t.tsRecv = f[0];
         t.price  = f[1];
-        std::string_view sideView = f[2];
-        std::string_view szView   = f[3];
+        std::string_view sideView   = f[2];
+        std::string_view szView     = f[3];
+        std::string_view actionView = f[10];
         std::from_chars(szView.data(), szView.data() + szView.size(), t.size);
         mdDetail::parseOptionalFloat(f[4], t.restingBids);
         mdDetail::parseOptionalFloat(f[5], t.restingAsks);
@@ -461,6 +478,8 @@ public:
         } else {
             t.unknownVolume = t.size;
         }
+        
+        if (kCSVMapping.actionCol >= 0) t.action = mdDetail::classifyAction(actionView);
         return t;
     }
 
@@ -469,8 +488,8 @@ public:
     /// split across t.executedBuys / t.executedSells / t.unknownVolume by the
     /// aggressor column. t.side is the side of the closing tick specifically
     /// (same row the timestamp and price come from), not the bar as a whole,
-    /// and t.restingBids / t.restingAsks / t.bidPrice / t.askPrice are that
-    /// same closing row's book and quote
+    /// and t.restingBids / t.restingAsks / t.bidPrice / t.askPrice / t.action
+    /// are that same closing row's book, quote and action
     /// @return the close tick (views into the underlying buffer), or nullopt at EOF
     std::optional<Tick> nextClose(int seconds) {
         _skipHeaderOnce();
@@ -551,6 +570,11 @@ public:
         if (kCSVMapping.rowNumberCol >= 0)
             mdDetail::parseOptionalLongLong(
                 mdDetail::field(lastLine, lastEol, kCSVMapping.rowNumberCol), t.rowNumber);
+        // action is a book-event classification, not something that sums across
+        // a bar, so like the resting/bid-ask columns it comes off the closing row
+        if (kCSVMapping.actionCol >= 0)
+            t.action = mdDetail::classifyAction(
+                mdDetail::field(lastLine, lastEol, kCSVMapping.actionCol));
         return t;
     }
 

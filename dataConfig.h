@@ -75,6 +75,16 @@ struct CSVMapping {
     int bidPriceCol;                                 // column index of the best bid price, -1 to disable
     int askPriceCol;                                 // column index of the best ask price, -1 to disable
 
+
+    int actionCol;                                    // column index of the action, -1 to disable 
+    const char* actionAddAlias = "A";
+    const char* actionCancelAlias = "C";
+    const char* actionModifyAlias = "M";
+    const char* actionTradeAlias = "T";
+    const char* actionFillAlias = "F";
+    const char* actionClearAlias = "R";
+    const char* actionNoneAlias = "N";
+
     double commision;                                 // commision, pts
     double spread;                                    // spread, pts
     double timingCost;                                // how much do you lose from latency? (pts)
@@ -87,20 +97,29 @@ namespace cfgDetail {
     inline std::string buySideStr    = "B";
     inline std::string sellSideStr   = "S";
     inline std::string unknownSideStr = "N";
+
+    inline std::string actionAddAliasStr = "A";
+    inline std::string actionCancelAliasStr = "C";
+    inline std::string actionModifyAliasStr = "M";
+    inline std::string actionTradeAliasStr = "T";
+    inline std::string actionFillAliasStr = "F";
+    inline std::string actionClearAliasStr = "R";
+    inline std::string actionNoneAliasStr = "N";
     inline bool loaded = false;
 }
 
 inline CSVMapping kCSVMapping{
     0, 0, 0,
-    "",                        // path (empty until loadConfig)
-    {0, 4, 5, 2, 8, 2},       // ISO-8601 defaults
-    true,                      // skipHeader
-    -1, -1,                    // tsEventCol/rowNumberCol disabled
-    -1, "", false,             // symbol filtering disabled
-    -1, "B", "S", "N",        // aggressor disabled, default aliases
-    -1, -1,                    // resting bid/ask columns disabled
-    -1, -1,                    // bid/ask price columns disabled
-    0.f, 0.f, 0.f             // costs
+    "",                                     // path (empty until loadConfig)
+    {0, 4, 5, 2, 8, 2},                     // ISO-8601 defaults
+    true,                                   // skipHeader
+    -1, -1,                                 // tsEventCol/rowNumberCol disabled
+    -1, "", false,                          // symbol filtering disabled
+    -1, "B", "S", "N",                      // aggressor disabled, default aliases
+    -1, -1,                                 // resting bid/ask columns disabled
+    -1, -1,                                 // bid/ask price columns disabled
+    -1, "A", "C", "M", "T", "F", "R", "N",  // action column disabled, default aliases
+    0.f, 0.f, 0.f                           // costs
 };
 
 inline void generateDefaultConfig(const char* tomlPath) {
@@ -149,6 +168,16 @@ restingAskCol = -1
 # bid_px_00 / ask_px_00
 bidPriceCol = -1
 askPriceCol = -1
+
+# action classification 
+actionCol   = -1
+actionAddAlias = "A"
+actionCancelAlias = "C"
+actionModifyAlias = "M"
+actionTradeAlias = "T"
+actionFillAlias = "F"
+actionClearAlias = "R"
+actionNoneAlias = "N"
 
 # trading costs (all in pts)
 commission = 0.0
@@ -219,6 +248,22 @@ inline void loadConfig(const char* tomlPath = "config.toml") {
 
     kCSVMapping.bidPriceCol = toml::getInt(cfg, "", "bidPriceCol", -1);
     kCSVMapping.askPriceCol = toml::getInt(cfg, "", "askPriceCol", -1);
+
+    kCSVMapping.actionCol = toml::getInt(cfg, "", "actionCol", -1);
+    cfgDetail::actionAddAliasStr = toml::getString(cfg, "", "actionAddAlias", "A");
+    kCSVMapping.actionAddAlias = cfgDetail::actionAddAliasStr.c_str();
+    cfgDetail::actionCancelAliasStr = toml::getString(cfg, "", "actionCancelAlias", "C");
+    kCSVMapping.actionCancelAlias = cfgDetail::actionCancelAliasStr.c_str();
+    cfgDetail::actionModifyAliasStr = toml::getString(cfg, "", "actionModifyAlias", "M");
+    kCSVMapping.actionModifyAlias = cfgDetail::actionModifyAliasStr.c_str();
+    cfgDetail::actionTradeAliasStr = toml::getString(cfg, "", "actionTradeAlias", "T");
+    kCSVMapping.actionTradeAlias = cfgDetail::actionTradeAliasStr.c_str();
+    cfgDetail::actionFillAliasStr = toml::getString(cfg, "", "actionFillAlias", "F");
+    kCSVMapping.actionFillAlias = cfgDetail::actionFillAliasStr.c_str();
+    cfgDetail::actionClearAliasStr = toml::getString(cfg, "", "actionClearAlias", "R");
+    kCSVMapping.actionClearAlias = cfgDetail::actionClearAliasStr.c_str();
+    cfgDetail::actionNoneAliasStr = toml::getString(cfg, "", "actionNoneAlias", "N");
+    kCSVMapping.actionNoneAlias = cfgDetail::actionNoneAliasStr.c_str();
 
     kCSVMapping.commision  = toml::getFloat(cfg, "", "commission", 0.f);
     kCSVMapping.spread     = toml::getFloat(cfg, "", "spread", 0.f);
