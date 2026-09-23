@@ -24,6 +24,7 @@ static void checkParallelLengths(const DataWindow& w) {
     CHECK_EQ(w.askPrices.size(),     n);
     CHECK_EQ(w.tsRecv.size(),       n);
     CHECK_EQ(w.tsEvent.size(),      n);
+    CHECK_EQ(w.tsEventNanos.size(), n);
     CHECK_EQ(w.rowNumbers.size(),   n);
 }
 
@@ -239,6 +240,7 @@ TEST(tsEventAndRowNumberStayParallelWhenUnmapped) {
     checkParallelLengths(w);
     for (std::size_t i = 0; i < w.tsEvent.size(); i++) {
         CHECK_EQ(w.tsEvent[i], 0LL);
+        CHECK_EQ(w.tsEventNanos[i], 0LL);
         CHECK_EQ(w.rowNumbers[i], 0LL);
     }
 }
@@ -314,8 +316,17 @@ TEST(tsEventAndRowNumberAreParsedWhenMapped) {
     const long long wantRow[6] = {3, 7, 2, 5, 4, 6};
     for (int i = 0; i < 6; i++) {
         CHECK_EQ(w.tsEvent[i], w.tsRecv[i]);
+        CHECK_EQ(w.tsEventNanos[i], w.tsRecv[i] * 1'000'000'000LL);
         CHECK_EQ(w.rowNumbers[i], wantRow[i]);
     }
+}
+
+// tsEventNanos keeps the 9 fractional digits that tsEvent (whole seconds) drops
+TEST(tsToEpochNanosKeepsFractionalDigits) {
+    useFixtureMapping();
+    long long whole = mdDetail::tsToEpochSeconds("2026-06-21T12:00:06.108130665Z");
+    CHECK_EQ(mdDetail::tsToEpochNanos("2026-06-21T12:00:06.108130665Z"), whole * 1'000'000'000LL + 108130665LL);
+    CHECK_EQ(mdDetail::tsToEpochNanos("2026-06-21T12:00:06.000000000Z"), whole * 1'000'000'000LL);
 }
 
 // ---------------------------------------------------------------- bar mode

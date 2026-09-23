@@ -64,7 +64,8 @@ enum class TradeDirection { Long, Short };
 /// closing tick's quote at timeframe>0), and stay 0 when bidPriceCol/askPriceCol
 /// aren't mapped
 /// tsRecv/tsEvent are epoch-seconds timestamps (ts_recv is what nextClose windows
-/// bars by; ts_event stays 0 when tsEventCol isn't mapped), and rowNumbers is
+/// bars by; ts_event stays 0 when tsEventCol isn't mapped), tsEventNanos is
+/// the same ts_event at full nanosecond resolution, and rowNumbers is
 /// each row's rowNumberCol value (0 when unmapped) - all closing-row snapshots
 /// at timeframe>0, same rule as the resting/bid-ask columns
 /// every vector here is the same length and indexed the same way, so
@@ -81,6 +82,7 @@ struct DataWindow {
     std::vector<double> askPrices;     // best ask price
     std::vector<long long> tsRecv;     // ts_recv, epoch seconds
     std::vector<long long> tsEvent;    // ts_event, epoch seconds, 0 when tsEventCol is -1
+    std::vector<long long> tsEventNanos; // ts_event, epoch nanoseconds, 0 when tsEventCol is -1
     std::vector<long long> rowNumbers; // from rowNumberCol, 0 when not configured
     std::vector<const char*> action;
     std::vector<const char*> side; 
@@ -255,6 +257,7 @@ public:
         out.askPrices.reserve(period);
         out.tsRecv.reserve(period);
         out.tsEvent.reserve(period);
+        out.tsEventNanos.reserve(period);
         out.rowNumbers.reserve(period);
         out.action.reserve(period);
         out.side.reserve(period);
@@ -274,6 +277,7 @@ public:
                 out.volumes.push_back(tick->size);
                 out.tsRecv.push_back(mdDetail::tsToEpochSeconds(tick->tsRecv));
                 out.tsEvent.push_back(tick->tsEvent.empty() ? 0 : mdDetail::tsToEpochSeconds(tick->tsEvent));
+                out.tsEventNanos.push_back(tick->tsEvent.empty() ? 0 : mdDetail::tsToEpochNanos(tick->tsEvent));
                 out.rowNumbers.push_back(tick->rowNumber);
 
                 // aggressor split, pushed unconditionally so these stay index-parallel
@@ -309,6 +313,7 @@ public:
                 out.volumes.push_back(bar->size);
                 out.tsRecv.push_back(mdDetail::tsToEpochSeconds(bar->tsRecv));
                 out.tsEvent.push_back(bar->tsEvent.empty() ? 0 : mdDetail::tsToEpochSeconds(bar->tsEvent));
+                out.tsEventNanos.push_back(bar->tsEvent.empty() ? 0 : mdDetail::tsToEpochNanos(bar->tsEvent));
                 out.rowNumbers.push_back(bar->rowNumber);
 
                 // per-bar aggressor split, summed across every tick in the bar

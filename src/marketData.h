@@ -128,6 +128,14 @@ inline long long tsToEpochSeconds(std::string_view ts) {
          + h * 3600LL + mi * 60LL + s;
 }
 
+/// @brief tsToEpochSeconds plus the 9 fractional digits, full epoch nanoseconds
+/// e.g. "2026-06-21T12:00:06.108130665Z"
+inline long long tsToEpochNanos(std::string_view ts) {
+    long long nanos = 0;
+    if (ts.size() >= 29) std::from_chars(ts.data() + 20, ts.data() + 29, nanos);
+    return tsToEpochSeconds(ts) * 1'000'000'000LL + nanos;
+}
+
 /// @brief build an ISO-8601 string for `startTs + seconds`, since ISO-8601
 /// sorts lexicographically, nextClose can just do string compares against
 /// this instead of parsing every row, way cheaper (~19-byte memcmp)
