@@ -341,6 +341,8 @@ public:
         eof = findEof(kCSVMapping.path, timeframe, strideIncrement);
     }
 
+    void overrideProcessedBars(int newValue) { processedBars = newValue; }
+
     /// @brief raw value at [row, col] straight from the CSV, an escape hatch for
     /// any column dataConfig.h doesn't map to a named field (nextTick/nextClose
     /// only ever parse timestamp/price/size/aggressor). row is 0-indexed and
