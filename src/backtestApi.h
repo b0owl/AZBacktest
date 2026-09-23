@@ -83,6 +83,7 @@ struct DataWindow {
     std::vector<long long> tsEvent;    // ts_event, epoch seconds, 0 when tsEventCol is -1
     std::vector<long long> rowNumbers; // from rowNumberCol, 0 when not configured
     std::vector<const char*> action;
+    std::vector<const char*> side; 
 };
 
 class Trade {
@@ -256,6 +257,7 @@ public:
         out.tsEvent.reserve(period);
         out.rowNumbers.reserve(period);
         out.action.reserve(period);
+        out.side.reserve(period);
 
         if (timeframe==0) {
             for (int i=0; i<period; i++) {
@@ -291,6 +293,9 @@ public:
                 // action
                 out.action.push_back(tick->action);
 
+                // side
+                out.side.push_back(tick->side);
+
                 processedBars++;
             }
         } else {
@@ -319,6 +324,9 @@ public:
 
                 // action
                 out.action.push_back(bar->action);
+
+                // side
+                out.side.push_back(bar->side);
 
                 processedBars++;
             }
