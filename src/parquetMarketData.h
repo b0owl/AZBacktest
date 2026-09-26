@@ -167,7 +167,7 @@ private:
     // _MarketData::_nextMatchingLine but over Parquet rows; leaves _absoluteRow
     // pointing AT the next matching row (not yet consumed) on success
     bool advanceToNextMatch() {
-        if (kCSVMapping.symbolCol < 0) {
+        if (kCSVMapping.symbolCol < 0 || kCSVMapping.symbol[0] == '\0') {
             if (_absoluteRow >= _totalRows) return false;
             ensureRowLoaded(_absoluteRow);
             return true;

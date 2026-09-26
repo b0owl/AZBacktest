@@ -96,6 +96,11 @@ inline void useFixtureMapping() {
     kCSVMapping.actionClearAlias  = "R";
     kCSVMapping.actionNoneAlias   = "N";
 
+    kCSVMapping.flagsCol      = -1;
+    kCSVMapping.bidCountCol   = -1;
+    kCSVMapping.askCountCol   = -1;
+    kCSVMapping.instrumentCol = -1;
+
     kCSVMapping.commision  = 0.f;
     kCSVMapping.spread     = 0.f;
     kCSVMapping.timingCost = 0.f;

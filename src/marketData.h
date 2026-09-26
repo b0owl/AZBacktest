@@ -77,6 +77,13 @@ struct Tick {
     double askPrice       = 0.0;
     long long rowNumber   = 0; // from rowNumberCol, 0 when not configured
     const char* action           = kCSVMapping.actionNoneAlias;
+    // MBP extras, 0 / empty when their column isn't configured (and always on
+    // the Parquet backend, which doesn't carry them yet)
+    int flags             = 0;  // flagsCol, bit 128 = F_LAST
+    double bidCount       = 0.0; // bidCountCol, resting orders at the best bid
+    double askCount       = 0.0; // askCountCol, resting orders at the best ask
+    long long instrumentId = 0; // instrumentCol
+    std::string_view symbol;    // symbolCol, filled whether or not it filters
 };
 
 namespace mdDetail {
@@ -379,7 +386,8 @@ private:
     // advance past rows that dont match the configured symbol filter
     // handles both exact match and rolling contract mode
     const char* _nextMatchingLine() {
-        if (kCSVMapping.symbolCol < 0) {
+        // an empty symbol means "read the column but don't filter on it"
+        if (kCSVMapping.symbolCol < 0 || kCSVMapping.symbol[0] == '\0') {
             if (_cur < _end) return _cur;
             return nullptr;
         }
@@ -456,14 +464,16 @@ public:
         // one pass over the row for every mapped column, the optional ones
         // (aggressor, resting sizes, bid/ask prices, ts_event, row number)
         // come back empty when their index is -1
-        const int cols[11] = { kCSVMapping.tsRecvCol,     kCSVMapping.priceCol,
+        const int cols[16] = { kCSVMapping.tsRecvCol,     kCSVMapping.priceCol,
                                kCSVMapping.aggressor,     kCSVMapping.sizeCol,
                                kCSVMapping.restingBidCol, kCSVMapping.restingAskCol,
                                kCSVMapping.bidPriceCol,   kCSVMapping.askPriceCol,
                                kCSVMapping.tsEventCol,    kCSVMapping.rowNumberCol,
-                               kCSVMapping.actionCol };
-        std::string_view f[11];
-        mdDetail::nFields(line, eol, cols, 11, f);
+                               kCSVMapping.actionCol,     kCSVMapping.flagsCol,
+                               kCSVMapping.bidCountCol,   kCSVMapping.askCountCol,
+                               kCSVMapping.instrumentCol, kCSVMapping.symbolCol };
+        std::string_view f[16];
+        mdDetail::nFields(line, eol, cols, 16, f);
 
         t.tsRecv = f[0];
         t.price  = f[1];
@@ -477,6 +487,11 @@ public:
         mdDetail::parseOptionalFloat(f[7], t.askPrice);
         t.tsEvent = f[8];
         mdDetail::parseOptionalLongLong(f[9], t.rowNumber);
+        if (!f[11].empty()) std::from_chars(f[11].data(), f[11].data() + f[11].size(), t.flags);
+        mdDetail::parseOptionalFloat(f[12], t.bidCount);
+        mdDetail::parseOptionalFloat(f[13], t.askCount);
+        mdDetail::parseOptionalLongLong(f[14], t.instrumentId);
+        t.symbol = f[15];
         if (kCSVMapping.aggressor >= 0 && sideView == kCSVMapping.buySideAggressorAlias) {
             t.side = kCSVMapping.buySideAggressorAlias;
             t.executedBuys = t.size;

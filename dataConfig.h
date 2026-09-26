@@ -88,6 +88,16 @@ struct CSVMapping {
     double commision;                                 // commision, pts
     double spread;                                    // spread, pts
     double timingCost;                                // how much do you lose from latency? (pts)
+
+    // extra MBP columns, all defaulted off (-1). on Databento MBP-1 these are
+    // flags(10) (128 = F_LAST, the last record of an exchange packet),
+    // bid_ct_00(17) / ask_ct_00(18) (resting order counts at the top level)
+    // and instrument_id(4). kept at the end so the positional kCSVMapping
+    // initializer below doesn't have to change
+    int flagsCol      = -1;
+    int bidCountCol   = -1;
+    int askCountCol   = -1;
+    int instrumentCol = -1;
 };
 
 // persistent string storage so const char* fields stay valid
@@ -179,6 +189,13 @@ actionFillAlias = "F"
 actionClearAlias = "R"
 actionNoneAlias = "N"
 
+# extra MBP columns, set to -1 to disable
+# on Databento MBP-1: flags(10), bid_ct_00(17), ask_ct_00(18), instrument_id(4)
+flagsCol      = -1
+bidCountCol   = -1
+askCountCol   = -1
+instrumentCol = -1
+
 # trading costs (all in pts)
 commission = 0.0
 spread     = 0.0
@@ -264,6 +281,11 @@ inline void loadConfig(const char* tomlPath = "config.toml") {
     kCSVMapping.actionClearAlias = cfgDetail::actionClearAliasStr.c_str();
     cfgDetail::actionNoneAliasStr = toml::getString(cfg, "", "actionNoneAlias", "N");
     kCSVMapping.actionNoneAlias = cfgDetail::actionNoneAliasStr.c_str();
+
+    kCSVMapping.flagsCol      = toml::getInt(cfg, "", "flagsCol", -1);
+    kCSVMapping.bidCountCol   = toml::getInt(cfg, "", "bidCountCol", -1);
+    kCSVMapping.askCountCol   = toml::getInt(cfg, "", "askCountCol", -1);
+    kCSVMapping.instrumentCol = toml::getInt(cfg, "", "instrumentCol", -1);
 
     kCSVMapping.commision  = toml::getFloat(cfg, "", "commission", 0.f);
     kCSVMapping.spread     = toml::getFloat(cfg, "", "spread", 0.f);
