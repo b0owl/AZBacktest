@@ -7,6 +7,8 @@
 #   azbacktest/azbacktest.h        - the amalgamated header (imgui + implot inlined)
 #   azbacktest/vendor/glfw/...     - glfw copied as-is, it's a prebuilt lib+dll
 #                                     so it can't be inlined into the header
+#   azbacktest/vendor/eigen/...    - eigen copied as-is, OLS.h keeps its
+#                                     <Eigen/Dense> include so add -Ivendor/eigen
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,6 +18,8 @@ OUT="$OUT_DIR/azbacktest.h"
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR/vendor/glfw/include" "$OUT_DIR/vendor/glfw/lib"
 cp -r "$SCRIPT_DIR/vendor/glfw/include/." "$OUT_DIR/vendor/glfw/include/"
+mkdir -p "$OUT_DIR/vendor/eigen"
+cp -r "$SCRIPT_DIR/vendor/eigen/." "$OUT_DIR/vendor/eigen/"
 
 # The vendored lib/ (libglfw3.a + glfw3.dll) is a Windows/MinGW prebuilt, so on
 # macOS grab the actual dylib build.sh links against instead (same Homebrew
@@ -98,6 +102,7 @@ FILES=(
     "$SCRIPT_DIR/src/marketData.h"
     "$SCRIPT_DIR/src/findEOF.h"
     "$SCRIPT_DIR/src/backtestApi.h"
+    "$SCRIPT_DIR/src/parameter-optimization/OLS.h"
     "$SCRIPT_DIR/src/skins/skinVars.h"
     "$SCRIPT_DIR/src/window/tooling/seriesPool.h"
     "$SCRIPT_DIR/src/window/tooling/statPool.h"

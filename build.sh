@@ -259,6 +259,17 @@ if [[ $uses_implot -eq 1 ]]; then
     )
 fi
 
+# Eigen is header-only and vendored, so just add its include path when used.
+uses_eigen=0
+for f in "${SCANNED[@]}"; do
+    if grep -qE '^\s*#\s*include\s*[<"]Eigen/' "$f"; then
+        uses_eigen=1; break
+    fi
+done
+if [[ $uses_eigen -eq 1 ]]; then
+    EXTRA_INCLUDES+=(-I"$PROJECT_ROOT/vendor/eigen")
+fi
+
 # marketData.h always carries the Parquet backend behind #ifdef AZBT_PARQUET
 # (both in the src/ tree and inlined into the amalgamated azbacktest.h), so
 # detect it by grepping for that macro rather than a specific #include - it
