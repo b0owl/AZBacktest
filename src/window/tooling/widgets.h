@@ -9,6 +9,7 @@
 #include "statPool.h"
 
 #include "management.h"
+#include "tiling.h"
 
 namespace widgetManagement {
 
@@ -174,7 +175,7 @@ inline void renderWindows() {
         auto& w = windows[wi];
         std::string winTitle = "Widget " + w.id;
         bool open = true;
-        ImGui::Begin(winTitle.c_str(), &open);
+        ImGui::Begin(winTitle.c_str(), &open, tiling::apply("widget_" + w.id));
 
         if (w.children.empty()) {
             // Centered "Add widget..." button

@@ -107,6 +107,7 @@ FILES=(
     "$SCRIPT_DIR/src/window/tooling/seriesPool.h"
     "$SCRIPT_DIR/src/window/tooling/statPool.h"
     "$SCRIPT_DIR/src/initSeries.h"
+    "$SCRIPT_DIR/src/window/tooling/tiling.h"
     "$SCRIPT_DIR/src/window/tooling/management.h"
     "$SCRIPT_DIR/src/window/tooling/panels.h"
     "$SCRIPT_DIR/src/window/tooling/widgets.h"

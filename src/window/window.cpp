@@ -20,6 +20,7 @@
 #include "tooling/panels.h"
 #include "tooling/widgets.h"
 #include "tooling/transforms.h"
+#include "tooling/tiling.h"
 
 ///@name Panel Series API
 ///@{
@@ -54,6 +55,23 @@ void newLineSeries(std::string panelId) {
 void newBarSeries(std::string panelId) {
     auto* panel = panelManagement::findPanel(panelId);
     if (panel) panel->children.push_back({panelManagement::Bar, "", {}, true});
+}
+
+///@}
+
+///@name Tiling API
+///@{
+
+/// @brief tiling on = windows get auto laid out, no dragging/resizing, no top bar
+void setTiling(bool on) { tiling::enabled = on; }
+
+/// @brief fix the grid size, 0 on either axis lets it pick
+void setTileGrid(int cols, int rows) { tiling::gridCols = cols; tiling::gridRows = rows; }
+
+/// @brief force a window into a cell, everything else fills around it
+/// @param key "panel_<id>", "widget_<id>", "transform_<id>" or "variable_<id>"
+void tileWindow(const std::string& key, int col, int row, int colSpan, int rowSpan) {
+    tiling::pins[key] = {col, row, colSpan < 1 ? 1 : colSpan, rowSpan < 1 ? 1 : rowSpan};
 }
 
 ///@}
@@ -93,11 +111,20 @@ void showConsole(const char* title, void (skin)()) {
         windowManagement::snapResizingWindow();
         windowManagement::clampWindowsToWorkArea();
 
+        if (tiling::enabled) {
+            std::vector<std::string> keys;
+            for (auto& p : panelManagement::panels)         keys.push_back("panel_" + p.id);
+            for (auto& w : widgetManagement::windows)       keys.push_back("widget_" + w.id);
+            for (auto& t : transformManagement::transforms) keys.push_back("transform_" + t.id);
+            for (auto& v : transformManagement::variables)  keys.push_back("variable_" + v.id);
+            tiling::plan(keys);
+        }
+
         panelManagement::renderPanels();
         widgetManagement::renderWindows();
         transformManagement::renderTransforms();
         transformManagement::renderVariables();
-        if (ImGui::BeginMainMenuBar()) {
+        if (!tiling::enabled && ImGui::BeginMainMenuBar()) {
             if (ImGui::MenuItem("Chart")) {
                 std::string id = std::to_string(panelManagement::nextPanelId());
                 panelManagement::newPanel(id);

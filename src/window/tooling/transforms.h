@@ -12,6 +12,7 @@
 #include "formula.h"
 #include "seriesPool.h"
 #include "statPool.h" // variable windows publish their number here
+#include "tiling.h"
 
 namespace transformManagement {
 
@@ -406,7 +407,7 @@ inline void renderTransforms() {
 
         bool open = true;
         ImGui::SetNextWindowSize(ImVec2(520, 520), ImGuiCond_FirstUseEver);
-        ImGui::Begin(title.c_str(), &open);
+        ImGui::Begin(title.c_str(), &open, tiling::apply("transform_" + t.id));
 
         // source series
         const bool haveSel = t.selectedSeriesIdx >= 0
@@ -597,7 +598,7 @@ inline void renderVariables() {
 
         bool open = true;
         ImGui::SetNextWindowSize(ImVec2(440, 300), ImGuiCond_FirstUseEver);
-        ImGui::Begin(title.c_str(), &open);
+        ImGui::Begin(title.c_str(), &open, tiling::apply("variable_" + v.id));
 
         // source series
         const bool haveSel = v.selectedSeriesIdx >= 0

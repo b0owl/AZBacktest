@@ -12,6 +12,7 @@
 #include "seriesPool.h"
 
 #include "management.h"
+#include "tiling.h"
 
 namespace panelManagement {
 
@@ -76,7 +77,7 @@ inline void renderPanels() {
         }
         winTitle += "###panel_" + p.id;
         bool open = true;
-        ImGui::Begin(winTitle.c_str(), &open);
+        ImGui::Begin(winTitle.c_str(), &open, tiling::apply("panel_" + p.id));
 
         std::string btnId = "+ Add Series##" + p.id;
         if (ImGui::Button(btnId.c_str())) ImGui::OpenPopup(btnId.c_str());
