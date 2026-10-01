@@ -23,6 +23,7 @@
 #include <random>
 #include <iostream>
 #include <unordered_map>
+#include <map>
 #include <variant>
 #include <stdexcept>
 #include "marketData.h"
@@ -546,6 +547,22 @@ public:
             transformedSeries.push_back(std::tanh(data[i]));
         }
         return transformedSeries;
+    }
+
+    /// @brief histogram-style bucketing, each value lands in the bucket
+    /// [k*bucketSize, (k+1)*bucketSize), keyed by that lower edge
+    /// i.e {0.5, 0.7, 1.8, 4.3} bucketed by 1 -> {0: 2, 1: 1, 4: 1}
+    /// empty buckets are skipped, map keeps them sorted low to high
+    /// @param bucketSize width of each bucket, must be > 0
+    std::map<double, int> bucket(double bucketSize = 1.0) {
+        if (bucketSize <= 0.0) {
+            throw std::invalid_argument("bucketSize passed in SetAnalytics.bucket must be > 0");
+        }
+        std::map<double, int> buckets;
+        for (double v : data) {
+            buckets[std::floor(v / bucketSize) * bucketSize]++; // floor so negatives go down, not toward 0
+        }
+        return buckets;
     }
 };
 

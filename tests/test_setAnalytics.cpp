@@ -48,3 +48,44 @@ TEST(shuffledSeriesMatchesHandComputedPearsonR) {
     SetAnalytics sa(x);
     CHECK_NEAR(sa.computeCorrelation(y), 0.47619047619047616, 1e-9);
 }
+
+// bucket(): values land in [k*size, (k+1)*size), keyed by the lower edge
+
+TEST(bucketByOneCountsPerUnitInterval) {
+    SetAnalytics sa({0.5, 0.7, 1.8, 4.3});
+    std::map<double, int> b = sa.bucket(1.0);
+    CHECK_EQ((int)b.size(), 3);
+    CHECK_EQ(b[0.0], 2);
+    CHECK_EQ(b[1.0], 1);
+    CHECK_EQ(b[4.0], 1);
+}
+
+TEST(bucketEdgeValueGoesToUpperBucket) {
+    SetAnalytics sa({1.0, 2.0, 2.0});
+    std::map<double, int> b = sa.bucket(1.0);
+    CHECK_EQ(b[1.0], 1);
+    CHECK_EQ(b[2.0], 2);
+}
+
+TEST(bucketNegativesFloorDownNotTowardZero) {
+    SetAnalytics sa({-0.5, -1.5, 0.5});
+    std::map<double, int> b = sa.bucket(1.0);
+    CHECK_EQ(b[-1.0], 1);
+    CHECK_EQ(b[-2.0], 1);
+    CHECK_EQ(b[0.0], 1);
+}
+
+TEST(bucketWiderSize) {
+    SetAnalytics sa({0.5, 0.7, 1.8, 4.3});
+    std::map<double, int> b = sa.bucket(2.0);
+    CHECK_EQ((int)b.size(), 2);
+    CHECK_EQ(b[0.0], 3);
+    CHECK_EQ(b[4.0], 1);
+}
+
+TEST(bucketNonPositiveSizeThrows) {
+    SetAnalytics sa({1.0});
+    bool threw = false;
+    try { sa.bucket(0.0); } catch (const std::invalid_argument&) { threw = true; }
+    CHECK(threw);
+}
