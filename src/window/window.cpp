@@ -93,17 +93,6 @@ void showConsole(const char* title, void (skin)()) {
         windowManagement::snapResizingWindow();
         windowManagement::clampWindowsToWorkArea();
 
-        // the .ini is read during the first NewFrame, so seed the default
-        // variable window after that. if one came back from the .ini this
-        // leaves it alone, otherwise you'd get a duplicate every launch
-        static bool seededVariable = false;
-        if (!seededVariable) {
-            seededVariable = true;
-            if (transformManagement::variables.empty())
-                transformManagement::newVariable(
-                    std::to_string(transformManagement::nextVariableId()));
-        }
-
         panelManagement::renderPanels();
         widgetManagement::renderWindows();
         transformManagement::renderTransforms();
